@@ -52,7 +52,8 @@ async function canvasStats(page: Page): Promise<{ distinct: number; meanLuma: nu
             best = { distinct: colours.size, meanLuma: luma / (data.length / 4) };
           }
           frames += 1;
-          if (frames < 10) requestAnimationFrame(sample);
+          // Stop as soon as a real scene is seen (slow software GPUs), else try up to 10 frames.
+          if (frames < 10 && best.distinct <= 40) requestAnimationFrame(sample);
           else resolve(best);
         };
         requestAnimationFrame(sample);
@@ -92,6 +93,8 @@ const CINEMATIC_CHUNK = /\/assets\/cinematic-[^/]+\.js$/;
 
 for (const tier of ["high", "medium", "low"] as const) {
   test(`?quality=${tier} renders on that tier (${LABEL[tier]})`, async ({ page }) => {
+    // Cinematic on CI's software GPU (SwiftShader) takes seconds per frame: same checks, more time.
+    if (tier === "high") test.slow();
     const found = await watch(page);
     const chunkRequests: string[] = [];
     page.on("request", (r) => {

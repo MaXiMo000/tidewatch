@@ -23,8 +23,8 @@ export const params = {
   glint: 1.0,
   // atmosphere
   fogColor: 0x23403b,
-  fogDensity: 0.022,
-  fogHeight: 2.2,
+  fogDensity: 0.016,
+  fogHeight: 4.2,
   shafts: 0.35,
   // world
   foliageDensity: 1.0,

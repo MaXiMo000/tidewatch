@@ -132,6 +132,10 @@ export class Foliage {
   private readonly leaves: Batch;
   private readonly moss: Batch;
   private readonly knees: Batch;
+  /** Dark root mounds joining each trunk to the water (no tree may look like it floats). */
+  private readonly mounds: Batch;
+  /** Low understory clumps around tree bases and along the banks, filling the bare-trunk zone. */
+  private readonly bushes: Batch;
   private readonly pads: Batch;
   private readonly flowers: Batch;
   private readonly reeds: Batch;
@@ -194,16 +198,31 @@ export class Foliage {
     this.leaves = batch(cardGeometry(false), leaf, MAX_TREES * 130);
     this.moss = batch(cardGeometry(true), mossMat, MAX_TREES * 28);
     this.knees = batch(new THREE.ConeGeometry(0.22, 1, 6, 1), bark, MAX_TREES * 5);
+    const mound = new THREE.ConeGeometry(1, 1, 9, 1, true);
+    mound.translate(0, 0.5, 0);
+    this.mounds = batch(mound, bark, MAX_TREES);
+    const bush = withSway(
+      new THREE.MeshStandardMaterial({
+        map: leafTex,
+        color: 0x7c9670,
+        alphaTest: 0.42,
+        side: THREE.DoubleSide,
+        roughness: 0.95,
+      }),
+      0.004,
+      "bush",
+    );
+    this.bushes = batch(cardGeometry(false), bush, MAX_TREES * 24);
     this.pads = batch(lilyGeometry(), pad, 900);
     this.flowers = batch(new THREE.IcosahedronGeometry(0.16, 0), flower, 60);
     this.reeds = batch(reedGeometry(), reed, 900);
-    for (const b of [this.trunks, this.branches, this.leaves, this.moss, this.knees, this.pads, this.flowers, this.reeds]) {
+    for (const b of [this.trunks, this.branches, this.leaves, this.moss, this.knees, this.mounds, this.bushes, this.pads, this.flowers, this.reeds]) {
       this.root.add(b.mesh);
     }
   }
 
   get instanceCount(): number {
-    return [this.trunks, this.branches, this.leaves, this.moss, this.knees, this.pads, this.flowers, this.reeds]
+    return [this.trunks, this.branches, this.leaves, this.moss, this.knees, this.mounds, this.bushes, this.pads, this.flowers, this.reeds]
       .reduce((n, b) => n + b.count, 0);
   }
 
@@ -221,7 +240,7 @@ export class Foliage {
   }
 
   private plant(model: WorldModel, view: ViewFrame): void {
-    for (const b of [this.trunks, this.branches, this.leaves, this.moss, this.knees, this.pads, this.flowers, this.reeds]) {
+    for (const b of [this.trunks, this.branches, this.leaves, this.moss, this.knees, this.mounds, this.bushes, this.pads, this.flowers, this.reeds]) {
       b.count = 0;
     }
     const rnd = mulberry32(0x7ee5 + model.topologyVersion);
@@ -261,6 +280,14 @@ export class Foliage {
       // Never plant the camera inside a crown: keep a horizontal clearance that grows with the tree.
       if (Math.hypot(x - eye.x, z - eye.z) < Math.max(6, height * (inward ? 0.75 : 0.5))) return;
       this.tree(rnd, x, z, height, inward);
+      // Root mound: a low dark flare that meets the water, so the trunk is visibly rooted.
+      const flare = height * 0.075;
+      this.p.set(x, -0.35, z);
+      this.q.setFromEuler(this.e.set(0, rnd() * Math.PI, 0));
+      this.s.set(flare * (1.2 + rnd() * 0.4), 0.9 + rnd() * 0.6, flare * (1.2 + rnd() * 0.4));
+      this.push(this.mounds, this.p, this.q, this.s);
+      // Understory around most bases: low leafy clumps that hide the bare lower trunk.
+      if (rnd() < 0.8) this.bush(rnd, x, z, height * (0.09 + rnd() * 0.06), 5 + Math.floor(rnd() * 5));
       // Cypress knees poking out around the base.
       const knees = 2 + Math.floor(rnd() * 3);
       for (let k = 0; k < knees && this.knees.count < this.knees.mesh.instanceMatrix.count; k++) {
@@ -310,6 +337,18 @@ export class Foliage {
       if (blocked(x, z, 4.5, crown)) continue;
       plantTree(x, z, height);
     }
+    // Understory along the bank shallows, between trunks (fills the gap between crowns and water).
+    const shrubs = Math.round(80 * density);
+    for (let i = 0; i < shrubs; i++) {
+      const s = -d * 0.5 + rnd() * (d + R + 60);
+      const depth = s + d;
+      const side = rnd() < 0.5 ? -1 : 1;
+      const l = side * (Math.min(depth * view.spread * 0.9 + 2, R * 0.95 + 5) + rnd() * 26);
+      const x = O.x + u.x * s + v.x * l;
+      const z = O.z + u.z * s + v.z * l;
+      if (blocked(x, z, 4, 3) || Math.hypot(x - eye.x, z - eye.z) < 8) continue;
+      this.bush(rnd, x, z, 1.6 + rnd() * 2.2, 5 + Math.floor(rnd() * 5));
+    }
     // Hero trees just ahead of the camera at both frame edges, reaching over the channel.
     // Only in landscape: a narrow portrait frame has no room for framing trees.
     for (const side of view.spread > 0.4 ? [-1, 1] : []) {
@@ -324,12 +363,7 @@ export class Foliage {
         plantTree(x, z, 22 + rnd() * 8, v.clone().multiplyScalar(-side));
       }
     }
-    // A small tree on the larger islets.
-    for (const isl of model.islands.values()) {
-      if (isl.scale < 1.2) continue;
-      const a = rnd() * Math.PI * 2;
-      plantTree(isl.place.x + Math.cos(a) * 1.1, isl.place.z + Math.sin(a) * 1.1, 6 + rnd() * 3);
-    }
+    // No trees ON islets: with full crowns they hide the structures that identify each service.
 
     // Lily pads: clusters near islets and along the bank shallows, a scatter in open water.
     const padCluster = (cx: number, cz: number, n: number, spread: number): void => {
@@ -376,7 +410,7 @@ export class Foliage {
       }
     }
 
-    for (const b of [this.trunks, this.branches, this.leaves, this.moss, this.knees, this.pads, this.flowers, this.reeds]) {
+    for (const b of [this.trunks, this.branches, this.leaves, this.moss, this.knees, this.mounds, this.bushes, this.pads, this.flowers, this.reeds]) {
       b.mesh.count = b.count;
       b.mesh.instanceMatrix.needsUpdate = true;
       if (b.mesh.instanceColor) b.mesh.instanceColor.needsUpdate = true;
@@ -404,7 +438,7 @@ export class Foliage {
     // Tree-local direction of `inward` (undo the tree's yaw).
     const inwardA = inward ? Math.atan2(inward.z, inward.x) + yaw : 0;
     for (let b = 0; b < nBranches; b++) {
-      const at = height * (0.4 + rnd() * 0.48);
+      const at = height * (0.3 + rnd() * 0.55);
       const a = inward && b < 3 ? inwardA + (rnd() - 0.5) * 0.9 : rnd() * Math.PI * 2;
       const len = height * (0.18 + rnd() * 0.2) * (inward && b < 3 ? 1.8 : 1);
       const tilt = 0.95 + rnd() * 0.45; // radians from vertical: spreading, nearly horizontal
@@ -442,6 +476,20 @@ export class Foliage {
     }
   }
 
+  /** A low understory clump of `cards` leaf cards around (x, z), roughly `size` tall. */
+  private bush(rnd: () => number, x: number, z: number, size: number, cards: number): void {
+    const spread = size * 1.1;
+    for (let k = 0; k < cards; k++) {
+      const a = rnd() * Math.PI * 2;
+      const r = Math.sqrt(rnd()) * spread;
+      this.p.set(x + Math.cos(a) * r, size * (0.35 + rnd() * 0.45), z + Math.sin(a) * r);
+      this.q.setFromEuler(this.e.set((rnd() - 0.5) * 0.5, rnd() * Math.PI, (rnd() - 0.5) * 0.3));
+      const c = size * (1.1 + rnd() * 0.7);
+      this.s.set(c, c * 0.75, c);
+      this.push(this.bushes, this.p, this.q, this.s);
+    }
+  }
+
   private push(b: Batch, p: THREE.Vector3, q: THREE.Quaternion, s: THREE.Vector3, colour?: THREE.Color): void {
     if (b.count >= b.mesh.instanceMatrix.count) return;
     this.m.compose(p, q, s);
@@ -457,7 +505,7 @@ export class Foliage {
   }
 
   dispose(): void {
-    for (const b of [this.trunks, this.branches, this.leaves, this.moss, this.knees, this.pads, this.flowers, this.reeds]) {
+    for (const b of [this.trunks, this.branches, this.leaves, this.moss, this.knees, this.mounds, this.bushes, this.pads, this.flowers, this.reeds]) {
       b.mesh.geometry.dispose();
       (b.mesh.material as THREE.Material).dispose();
       b.mesh.dispose();
