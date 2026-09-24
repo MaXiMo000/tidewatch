@@ -8,19 +8,35 @@ import * as THREE from "three";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import type { WorldModel } from "./model";
 
+/** A flat-topped bald cypress: flared trunk under an umbrella crown of three offset lumps. */
 function treeGeometry(): THREE.BufferGeometry {
-  const trunk = new THREE.CylinderGeometry(0.07, 0.4, 1, 6, 1);
+  const trunk = new THREE.CylinderGeometry(0.035, 0.22, 1, 6, 3);
   trunk.translate(0, 0.5, 0);
-  const crownA = new THREE.IcosahedronGeometry(1, 0);
-  crownA.scale(0.5, 0.15, 0.45);
-  crownA.translate(0.06, 0.97, 0);
-  const crownB = new THREE.IcosahedronGeometry(1, 0);
-  crownB.scale(0.34, 0.12, 0.3);
-  crownB.translate(-0.16, 0.8, 0.08);
-  const merged = mergeGeometries([trunk.toNonIndexed(), crownA.toNonIndexed(), crownB.toNonIndexed()]);
-  trunk.dispose();
-  crownA.dispose();
-  crownB.dispose();
+  const pos = trunk.getAttribute("position");
+  for (let i = 0; i < pos.count; i++) {
+    const y = pos.getY(i);
+    const flare = 1 + 1.6 * Math.exp(-y * 9); // buttressed base
+    pos.setX(i, pos.getX(i) * flare);
+    pos.setZ(i, pos.getZ(i) * flare);
+  }
+  const lump = (sx: number, sy: number, sz: number, x: number, y: number, z: number): THREE.BufferGeometry => {
+    const g = new THREE.IcosahedronGeometry(1, 0); // 20 triangles: plenty for a silhouette in fog
+    g.scale(sx, sy, sz);
+    g.translate(x, y, z);
+    return g;
+  };
+  const parts = [
+    trunk,
+    lump(0.42, 0.1, 0.38, 0.05, 0.97, 0),
+    lump(0.3, 0.09, 0.27, -0.2, 0.84, 0.1),
+    lump(0.26, 0.08, 0.24, 0.18, 0.72, -0.12),
+  ].map((g) => {
+    const n = g.toNonIndexed();
+    g.dispose();
+    return n;
+  });
+  const merged = mergeGeometries(parts);
+  for (const p of parts) p.dispose();
   merged.computeVertexNormals();
   return merged;
 }
@@ -54,12 +70,14 @@ export class Silhouettes {
       return seed / 4294967296;
     };
     for (let i = 0; i < n; i++) {
-      const a = (i / n) * Math.PI * 2 + rnd() * 0.12;
-      const r = orbit * (1.5 + Math.pow(rnd(), 0.6) * 1.9);
+      // Scattered in depth (not a ring): a few nearer groves, most far off in the mist.
+      const a = rnd() * Math.PI * 2;
+      const r = orbit * (1.45 + Math.pow(rnd(), 0.8) * 2.4);
       this.p.set(cx + Math.cos(a) * r, -0.2, cz + Math.sin(a) * r);
       this.q.setFromEuler(this.e.set(0, rnd() * Math.PI * 2, 0));
-      const h = 5 + rnd() * 7;
-      this.s.set(h * (0.35 + rnd() * 0.25), h, h * (0.35 + rnd() * 0.25));
+      const h = 6 + rnd() * 8;
+      const w = h * (0.7 + rnd() * 0.5);
+      this.s.set(w, h, w * (0.8 + rnd() * 0.3));
       this.m.compose(this.p, this.q, this.s);
       this.mesh.setMatrixAt(i, this.m);
     }

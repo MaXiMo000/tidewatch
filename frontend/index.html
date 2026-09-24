@@ -2,10 +2,10 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="referrer" content="no-referrer" />
     <meta name="color-scheme" content="dark" />
-    <meta name="description" content="A live 3D view of service health: islands are services, channels are traffic." />
+    <meta name="description" content="A live, cinematic view of service health: islands are services, boats are requests, mist is latency." />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <title>Tidewatch</title>
     <!-- No inline scripts or styles anywhere: the production CSP is script-src 'self'; style-src 'self'. -->
@@ -13,26 +13,68 @@
   <body>
     <canvas id="scene" aria-hidden="true"></canvas>
     <div id="vignette" aria-hidden="true"></div>
+    <div id="island-labels" aria-label="Islands"></div>
+
     <main id="hud">
       <header id="hud-top">
-        <h1 id="hud-brand">TIDEWATCH</h1>
-        <div id="hud-readout">
+        <h1 id="hud-brand"><span class="brand-mark" aria-hidden="true">≋</span> Tidewatch</h1>
+
+        <div id="hud-centre">
           <p id="hud-status" role="status" aria-live="polite">connecting…</p>
+          <div id="hud-compass" aria-hidden="true">
+            <div id="hud-compass-window"><div id="hud-compass-strip"></div></div>
+            <span id="hud-heading">000°</span>
+          </div>
+        </div>
+
+        <div id="hud-right">
           <p id="hud-summary" aria-live="polite"></p>
+          <div id="hud-tier-wrap">
+            <button id="hud-tier" type="button" aria-haspopup="menu" aria-expanded="false" aria-controls="hud-tier-menu">Quality</button>
+            <div id="hud-tier-menu" role="menu" aria-label="Rendering quality" hidden></div>
+          </div>
         </div>
       </header>
+
       <footer id="hud-bottom">
-        <div id="hud-compass" role="img" aria-label="Compass">
-          <div id="hud-compass-rose" aria-hidden="true">
-            <span class="cardinal cardinal-n">N</span>
-            <span class="cardinal cardinal-e">E</span>
-            <span class="cardinal cardinal-s">S</span>
-            <span class="cardinal cardinal-w">W</span>
-          </div>
-          <span id="hud-heading" aria-hidden="true">000°</span>
+        <section id="place" aria-live="polite">
+          <p id="place-eyebrow">Exploring the archipelago</p>
+          <h2 id="place-title">Tidewatch</h2>
+          <p id="place-subtitle">Every island a service. Hover or tap one to look closer.</p>
+          <p id="place-stats"></p>
+        </section>
+
+        <p id="hud-hints" aria-hidden="true">
+          <span><kbd>Q</kbd> quality</span>
+          <span><kbd>L</kbd> labels</span>
+          <span><kbd>Tab</kbd> islands</span>
+          <span><kbd>Esc</kbd> close</span>
+        </p>
+
+        <div id="hud-legend-wrap">
+          <button id="hud-legend-toggle" type="button" aria-expanded="false" aria-controls="hud-legend">Legend</button>
+          <dl id="hud-legend" hidden>
+            <div><dt><span class="swatch swatch-health" aria-hidden="true"></span>Colour</dt><dd>health: teal ok, amber degraded, red failing</dd></div>
+            <div><dt><span class="swatch swatch-fog" aria-hidden="true"></span>Mist</dt><dd>latency: thicker and murkier when slow</dd></div>
+            <div><dt><span class="swatch swatch-boat" aria-hidden="true"></span>Boats</dt><dd>requests moving between services</dd></div>
+            <div><dt><span class="swatch swatch-line" aria-hidden="true"></span>Channels</dt><dd>traffic between services</dd></div>
+          </dl>
+          <p id="hud-caption">Demo data · simulated incident every 90 s</p>
         </div>
-        <button id="hud-tier" type="button">quality: …</button>
       </footer>
+
+      <aside id="island-card" hidden aria-live="polite">
+        <p class="card-kind"></p>
+        <h3 class="card-title"></h3>
+        <dl>
+          <div><dt>Status</dt><dd class="card-status"></dd></div>
+          <div><dt>Requests</dt><dd class="card-rps"></dd></div>
+          <div><dt>p95 latency</dt><dd class="card-p95"></dd></div>
+          <div><dt>Errors</dt><dd class="card-err"></dd></div>
+        </dl>
+      </aside>
+
+      <p id="hud-toast" role="status" aria-live="polite" data-show="0"></p>
       <div id="hud-loading" hidden>
         <label id="hud-loading-label" for="hud-loading-bar">Loading</label>
         <progress id="hud-loading-bar" max="100" value="0"></progress>

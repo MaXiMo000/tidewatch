@@ -104,8 +104,10 @@ for (const tier of ["high", "medium", "low"] as const) {
     await expect(page.locator("html")).toHaveAttribute("data-tier", tier);
     await expect(page.locator("#hud-tier")).toHaveText(LABEL[tier]);
     const path = tier === "high" ? "cinematic" : "stylised";
-    await expect(page.locator("html")).toHaveAttribute("data-path", path, { timeout: 30_000 });
-    await expect(page.locator("html")).toHaveAttribute("data-ready", "1", { timeout: 30_000 });
+    // Software GPUs (CI's SwiftShader) need seconds per Cinematic frame: same check, longer wait.
+    const wait = tier === "high" ? 100_000 : 30_000;
+    await expect(page.locator("html")).toHaveAttribute("data-path", path, { timeout: wait });
+    await expect(page.locator("html")).toHaveAttribute("data-ready", "1", { timeout: wait });
     expect((await canvasStats(page)).distinct).toBeGreaterThan(40);
     // Balanced and Simple must never download the Cinematic code.
     expect(chunkRequests.length > 0).toBe(tier === "high");
@@ -114,20 +116,67 @@ for (const tier of ["high", "medium", "low"] as const) {
   });
 }
 
-test("quality button cycles auto -> high -> medium -> low -> auto and is keyboard operable", async ({
+test("quality menu is keyboard operable: open, arrow to each tier, select, close", async ({
   page,
 }) => {
   await page.goto("/?quality=auto");
   const button = page.locator("#hud-tier");
+  const menu = page.locator("#hud-tier-menu");
   await expect(button).toHaveText(/\(auto\)$/);
   await button.focus();
+  let index = 0; // menu order: auto, high, medium, low
   for (const tier of ["high", "medium", "low"] as const) {
     await page.keyboard.press("Enter");
+    await expect(menu).toBeVisible();
+    await expect(button).toHaveAttribute("aria-expanded", "true");
+    // The current choice has focus; step down to the next one.
+    await page.keyboard.press("ArrowDown");
+    index += 1;
+    await page.keyboard.press("Enter");
+    await expect(menu).toBeHidden();
     await expect(page.locator("html")).toHaveAttribute("data-tier", tier);
+    await expect(button).toBeFocused();
     await expect(button).toHaveAccessibleName(new RegExp(`Rendering quality ${LABEL[tier]}\\.`));
   }
+  expect(index).toBe(3);
+  // Cinematic warns about battery/GPU in the menu.
   await page.keyboard.press("Enter");
-  await expect(button).toHaveText(/\(auto\)$/);
+  await expect(menu.getByRole("menuitemradio", { name: /Cinematic/ })).toContainText(/battery/i);
+  await page.keyboard.press("Escape");
+  await expect(menu).toBeHidden();
+});
+
+test("Q cycles quality from anywhere", async ({ page }) => {
+  await page.goto("/?quality=auto");
+  await expect(page.locator("#hud-tier")).toHaveText(/\(auto\)$/);
+  await page.keyboard.press("q");
+  await expect(page.locator("html")).toHaveAttribute("data-tier", "high");
+  await page.keyboard.press("q");
+  await expect(page.locator("html")).toHaveAttribute("data-tier", "medium");
+});
+
+test("every island is labelled and can be inspected by keyboard (card + discovered toast)", async ({
+  page,
+}) => {
+  await page.goto("/?quality=medium");
+  await expect(page.locator("html")).toHaveAttribute("data-ready", "1", { timeout: 30_000 });
+  const labels = page.locator(".island-label");
+  await expect(labels).toHaveCount(7);
+  const gateway = labels.filter({ hasText: /gateway/i });
+  await gateway.focus();
+  const card = page.locator("#island-card");
+  await expect(card).toBeVisible();
+  await expect(card.locator(".card-title")).toHaveText(/gateway/i);
+  // Status as a word (never colour alone) and the three numbers.
+  await expect(card.locator(".card-status")).toHaveText(/healthy|degraded|failing/);
+  await expect(card.locator(".card-rps")).toHaveText(/req\/s/);
+  await expect(card.locator(".card-p95")).toHaveText(/ms|s$/);
+  await expect(card.locator(".card-err")).toHaveText(/%$/);
+  await expect(page.locator("#hud-toast")).toHaveText(/Discovered · Gateway/i);
+  await expect(page.locator("#place-title")).toHaveText(/gateway/i);
+  await page.keyboard.press("Escape");
+  await gateway.blur();
+  await expect(card).toBeHidden();
 });
 
 test("prefers-reduced-motion stops the camera orbit", async ({ page }) => {

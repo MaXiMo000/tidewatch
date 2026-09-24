@@ -5,16 +5,8 @@
  */
 import * as THREE from "three";
 
-export function mulberry32(seed: number): () => number {
-  let a = seed >>> 0;
-  return () => {
-    a = (a + 0x6d2b79f5) >>> 0;
-    let t = a;
-    t = Math.imul(t ^ (t >>> 15), t | 1);
-    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-}
+export { mulberry32 } from "../scene/random";
+import { mulberry32 } from "../scene/random";
 
 function canvasTexture(draw: (ctx: CanvasRenderingContext2D, size: number) => void, size: number): THREE.CanvasTexture {
   const canvas = document.createElement("canvas");

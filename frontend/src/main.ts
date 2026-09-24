@@ -8,7 +8,9 @@
  */
 import * as THREE from "three";
 import "./style.css";
+import { prettyName } from "./hud/copy";
 import { Hud, type HudState, type TierChoice } from "./hud/hud";
+import { Inspector } from "./hud/inspector";
 import { MetricsClient } from "./net/client";
 import { detectStartTier } from "./quality/detect";
 import { initialTier, readDeviceInfo } from "./quality/gpu";
@@ -21,10 +23,12 @@ import { WorldModel } from "./scene/model";
 import { store } from "./state/store";
 
 const canvasEl = document.querySelector<HTMLCanvasElement>("#scene");
+const labelLayer = document.querySelector<HTMLElement>("#island-labels");
+const cardEl = document.querySelector<HTMLElement>("#island-card");
 const loadingEl = document.querySelector<HTMLElement>("#hud-loading");
 const loadingBar = document.querySelector<HTMLProgressElement>("#hud-loading-bar");
 const loadingLabel = document.querySelector<HTMLElement>("#hud-loading-label");
-if (!canvasEl || !loadingEl || !loadingBar || !loadingLabel) {
+if (!canvasEl || !loadingEl || !loadingBar || !loadingLabel || !labelLayer || !cardEl) {
   throw new Error("required DOM nodes are missing");
 }
 // Re-bind as non-null consts: TS does not carry the narrowing above into closures.
@@ -74,6 +78,17 @@ const hud = new Hud(
   },
   () => choice,
 );
+
+const inspector = new Inspector(labelLayer, cardEl, (state) => hud.showToast(prettyName(state.id)));
+
+window.addEventListener("keydown", (e) => {
+  if (e.altKey || e.ctrlKey || e.metaKey) return;
+  const typing = e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement;
+  if (typing || hud.menuOpen) return;
+  if (e.key === "q" || e.key === "Q") hud.cycleQuality();
+  else if (e.key === "l" || e.key === "L") inspector.labelsVisible = !inspector.labelsVisible;
+  else if (e.key === "Escape") inspector.clear();
+});
 
 let renderer: THREE.WebGLRenderer;
 try {
@@ -212,9 +227,16 @@ window.addEventListener(
   (e) => {
     markInput();
     rig.setPointer((e.clientX / window.innerWidth) * 2 - 1, 1 - (e.clientY / window.innerHeight) * 2);
+    // Only pick islands when the pointer is over the scene, not over HUD controls.
+    inspector.setPointer(e.target === canvas ? e.clientX : null, e.clientY);
   },
   { passive: true },
 );
+canvas.addEventListener("pointerdown", (e) => {
+  inspector.setPointer(e.clientX, e.clientY);
+});
+canvas.addEventListener("click", () => inspector.click());
+canvas.addEventListener("pointerleave", () => inspector.setPointer(null));
 window.addEventListener("resize", () => {
   markInput();
   resize();
@@ -320,6 +342,8 @@ function frame(now: number): void {
   const ready = path.name === wanted && framesOnPath > 8 ? "1" : "0";
   if (ready !== lastReady) document.documentElement.dataset["ready"] = lastReady = ready;
 
+  const inspection = inspector.update(model, rig.camera, canvas.clientWidth, canvas.clientHeight);
+  hud.setPlace(inspection.state);
   updateHud();
   overlay?.frame(now, performance.now() - t0, renderer, tier, path.info().gpuBytes);
 }

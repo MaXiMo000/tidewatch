@@ -9,53 +9,42 @@
  */
 import * as THREE from "three";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
-import { glowMaterial } from "../scene/glow";
-import { unitNoise } from "../scene/layout";
-import type { IslandState, Status, WorldModel } from "../scene/model";
-import { mulberry32 } from "./textures";
-
-export type Silhouette = "lighthouse" | "tower" | "hall" | "beacon" | "vault" | "jetty" | "workshop";
-
-/** Kind -> silhouette, with the well-known auth role called out (it shares kind "service"). */
-export function silhouetteFor(state: Pick<IslandState, "id" | "kind">): Silhouette {
-  if (state.kind === "service" && /auth|login|identity|iam|sso/.test(state.id)) return "tower";
-  switch (state.kind) {
-    case "gateway":
-      return "lighthouse";
-    case "cache":
-      return "beacon";
-    case "database":
-      return "vault";
-    case "queue":
-      return "jetty";
-    case "worker":
-      return "workshop";
-    default:
-      return "hall";
-  }
-}
+import { glowMaterial } from "./glow";
+import { unitNoise } from "./layout";
+import type { IslandState, Status, WorldModel } from "./model";
+import { isletScale, type Silhouette, silhouetteFor } from "./silhouette";
+import { GlowBatch } from "./glows";
+import { mulberry32 } from "./random";
 
 const STATUS_HEX: Record<Status, number> = { ok: 0x3fd0a5, degraded: 0xf2b134, failing: 0xff4d5e };
 
+/** "pbr": Cinematic (standard materials, shadows). "flat": Balanced/Simple (flat Lambert, cheaper). */
+export type Flavour = "pbr" | "flat";
+type Lit = THREE.MeshStandardMaterial | THREE.MeshLambertMaterial;
+
 interface Mats {
-  wood: THREE.MeshStandardMaterial;
-  darkWood: THREE.MeshStandardMaterial;
-  stone: THREE.MeshStandardMaterial;
-  paleStone: THREE.MeshStandardMaterial;
-  roof: THREE.MeshStandardMaterial;
-  metal: THREE.MeshStandardMaterial;
-  window: THREE.MeshStandardMaterial;
-  rock: THREE.MeshStandardMaterial;
-  status: Record<Status, THREE.MeshStandardMaterial>;
+  wood: Lit;
+  darkWood: Lit;
+  stone: Lit;
+  paleStone: Lit;
+  roof: Lit;
+  metal: Lit;
+  window: Lit;
+  rock: Lit;
+  status: Record<Status, Lit>;
   lanternGlow: THREE.SpriteMaterial;
   statusGlow: Record<Status, THREE.SpriteMaterial>;
 }
 
-function makeMats(): Mats {
-  const std = (color: number, roughness: number, metalness = 0): THREE.MeshStandardMaterial =>
-    new THREE.MeshStandardMaterial({ color, roughness, metalness });
-  const emissive = (hex: number, intensity: number): THREE.MeshStandardMaterial =>
-    new THREE.MeshStandardMaterial({ color: 0x000000, emissive: hex, emissiveIntensity: intensity, roughness: 0.6 });
+function makeMats(flavour: Flavour): Mats {
+  const std = (color: number, roughness: number, metalness = 0): Lit =>
+    flavour === "pbr"
+      ? new THREE.MeshStandardMaterial({ color, roughness, metalness })
+      : new THREE.MeshLambertMaterial({ color, flatShading: true });
+  const emissive = (hex: number, intensity: number): Lit =>
+    flavour === "pbr"
+      ? new THREE.MeshStandardMaterial({ color: 0x000000, emissive: hex, emissiveIntensity: intensity, roughness: 0.6 })
+      : new THREE.MeshLambertMaterial({ color: 0x000000, emissive: hex, emissiveIntensity: Math.min(intensity, 1.4) });
   return {
     wood: std(0x4a3a2c, 0.85),
     darkWood: std(0x2c231c, 0.9),
@@ -64,7 +53,10 @@ function makeMats(): Mats {
     roof: std(0x2a2328, 0.8),
     metal: std(0x2b2d30, 0.45, 0.8),
     window: emissive(0xffa95c, 5.5),
-    rock: new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95 }),
+    rock:
+      flavour === "pbr"
+        ? new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95 })
+        : new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true }),
     status: {
       ok: emissive(STATUS_HEX.ok, 4),
       degraded: emissive(STATUS_HEX.degraded, 5),
@@ -80,8 +72,8 @@ function makeMats(): Mats {
 }
 
 /** Lumpy islet: displaced, flattened icosphere, moss on top, wet dark rock at the waterline. */
-function isletGeometry(id: string, radius: number): THREE.BufferGeometry {
-  const g = new THREE.IcosahedronGeometry(1, 4);
+function isletGeometry(id: string, radius: number, detail = 4): THREE.BufferGeometry {
+  const g = new THREE.IcosahedronGeometry(1, detail);
   const pos = g.getAttribute("position");
   const colors = new Float32Array(pos.count * 3);
   const moss = new THREE.Color(0x2f3d22);
@@ -327,7 +319,7 @@ function structure(kind: Silhouette, mats: Mats, status: Status, rnd: () => numb
  * so it can switch status material). ~15 meshes -> ~5, and every mesh is drawn 3x per frame (main
  * view, planar reflection, shadow map), so this matters.
  */
-function mergeStatic(group: THREE.Group, keep: THREE.Object3D): void {
+function mergeStatic(group: THREE.Group, keep: THREE.Object3D | null): void {
   group.updateMatrixWorld(true);
   const byMaterial = new Map<THREE.Material, THREE.BufferGeometry[]>();
   const drop: THREE.Mesh[] = [];
@@ -360,14 +352,56 @@ function mergeStatic(group: THREE.Group, keep: THREE.Object3D): void {
   }
 }
 
+/**
+ * Flat flavour only: bake every body material's colour into vertex colours and merge the islet and
+ * all non-glowing parts into ONE mesh (one draw call per islet instead of ~6). Materials in `live`
+ * (windows, the status signal) stay separate because they animate per island.
+ */
+function mergeFlatBody(root: THREE.Group, body: THREE.Material, live: Set<THREE.Material>): void {
+  root.updateMatrixWorld(true);
+  const geos: THREE.BufferGeometry[] = [];
+  const drop: THREE.Mesh[] = [];
+  const c = new THREE.Color();
+  root.traverse((o) => {
+    if (!(o instanceof THREE.Mesh) || Array.isArray(o.material) || live.has(o.material)) return;
+    const g = o.geometry.index ? o.geometry.toNonIndexed() : o.geometry.clone();
+    const n = g.getAttribute("position").count;
+    if (!g.getAttribute("color")) {
+      const m = o.material as THREE.MeshLambertMaterial;
+      c.copy(m.color ?? c.set(0x444444));
+      const colours = new Float32Array(n * 3);
+      for (let i = 0; i < n; i++) colours.set([c.r, c.g, c.b], i * 3);
+      g.setAttribute("color", new THREE.BufferAttribute(colours, 3));
+    }
+    for (const name of Object.keys(g.attributes)) {
+      if (name !== "position" && name !== "normal" && name !== "color") g.deleteAttribute(name);
+    }
+    g.applyMatrix4(o.matrixWorld);
+    geos.push(g);
+    drop.push(o);
+  });
+  for (const o of drop) {
+    o.removeFromParent();
+    o.geometry.dispose();
+  }
+  const merged = mergeGeometries(geos);
+  for (const g of geos) g.dispose();
+  if (!merged) return;
+  merged.applyMatrix4(root.matrixWorld.clone().invert());
+  merged.computeVertexNormals();
+  root.add(new THREE.Mesh(merged, body));
+}
+
 interface IslandView {
   state: IslandState;
   root: THREE.Group;
   /** Per-island materials so each islet can pulse / flicker with its own health. */
-  signalMat: THREE.MeshStandardMaterial;
-  windowMat: THREE.MeshStandardMaterial;
+  signalMat: Lit;
+  windowMat: Lit;
   glowMat: THREE.SpriteMaterial;
   lanternMat: THREE.SpriteMaterial;
+  /** Glow anchors (former sprites) rendered through the shared GlowBatch. */
+  glows: { anchor: THREE.Object3D; size: number; lantern: boolean }[];
   phase: number;
   /** World-space shore circle for the water's foam: x, z, radius. */
   shore: THREE.Vector3;
@@ -390,9 +424,30 @@ function smoothNoise(t: number, seed: number): number {
   );
 }
 
+const LANTERN = new THREE.Color(1.0, 0.62, 0.34);
+
 export class Islands {
   readonly root = new THREE.Group();
-  private readonly mats = makeMats();
+  private readonly glowBatch = new GlowBatch();
+  private readonly wp = new THREE.Vector3();
+  private readonly mats: Mats;
+  /** Flat flavour: one vertex-coloured body material shared by every merged islet. */
+  private readonly flatBody = new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true });
+  /** Flat materials cannot go far above 1 emissive without clipping; Cinematic uses HDR values. */
+  private readonly emissiveScale: number;
+  private glowsEnabled = true;
+
+  constructor(private readonly flavour: Flavour = "pbr") {
+    this.mats = makeMats(flavour);
+    this.emissiveScale = flavour === "pbr" ? 1 : 0.25;
+    this.root.add(this.glowBatch.mesh);
+  }
+
+  /** Simple tier: no glow billboards at all (one draw call and a lot of overdraw saved). */
+  setGlows(enabled: boolean): void {
+    this.glowsEnabled = enabled;
+    this.glowBatch.mesh.visible = enabled;
+  }
   private views: IslandView[] = [];
   private builtVersion = -1;
   private facingKey = "";
@@ -414,7 +469,7 @@ export class Islands {
       }
     }
     for (const v of this.views) {
-      const scale = 0.95 + 0.4 * v.state.scale;
+      const scale = isletScale(v.state.scale);
       v.root.scale.setScalar(scale);
       v.shore.set(v.root.position.x, v.root.position.z, 1.35 * scale);
       const w = v.state.weight;
@@ -431,15 +486,28 @@ export class Islands {
       const flicker = reducedMotion ? 0.6 : smoothNoise(t * 2.2, v.phase * 13);
       const intensity = 3.5 + w.degraded * (1 + 4 * pulse) + w.failing * (2 + 6 * flicker);
       v.signalMat.emissive.copy(this.tmp);
-      v.signalMat.emissiveIntensity = intensity;
+      v.signalMat.emissiveIntensity = intensity * this.emissiveScale;
       v.glowMat.color.copy(this.tmp);
       v.glowMat.opacity = 0.35 + w.degraded * 0.35 * pulse + w.failing * 0.5 * flicker;
       // Windows: warm when healthy; dim and pulse when degraded; reddish, stuttering when failing.
       v.windowMat.emissive.copy(WARM).lerp(RED_WINDOW, w.failing * 0.6);
       v.windowMat.emissiveIntensity =
-        5.5 * (1 - w.degraded * 0.35 * (1 - pulse) - w.failing * (0.55 - 0.45 * flicker));
+        5.5 * this.emissiveScale * (1 - w.degraded * 0.35 * (1 - pulse) - w.failing * (0.55 - 0.45 * flicker));
       v.lanternMat.opacity = 0.5 * (1 - w.failing * 0.4 * (1 - flicker));
     }
+    // All glows in one draw call per pass.
+    if (!this.glowsEnabled) return;
+    this.glowBatch.begin();
+    for (const v of this.views) {
+      v.root.updateMatrixWorld();
+      const k = v.root.scale.x;
+      for (const g of v.glows) {
+        g.anchor.getWorldPosition(this.wp);
+        if (g.lantern) this.glowBatch.push(this.wp, g.size * k, LANTERN, v.lanternMat.opacity);
+        else this.glowBatch.push(this.wp, g.size * k, v.glowMat.color, v.glowMat.opacity);
+      }
+    }
+    this.glowBatch.end();
   }
 
   get meshCount(): number {
@@ -459,7 +527,10 @@ export class Islands {
       root.name = state.id;
       const kind = silhouetteFor(state);
       const radius = kind === "vault" ? 1.55 : kind === "beacon" ? 0.95 : 1.3;
-      const islet = new THREE.Mesh(isletGeometry(state.id, radius), this.mats.rock);
+      const islet = new THREE.Mesh(
+        isletGeometry(state.id, radius, this.flavour === "pbr" ? 4 : 2),
+        this.mats.rock,
+      );
       islet.receiveShadow = true;
       islet.castShadow = true;
       const signalMat = this.mats.status.ok.clone();
@@ -474,8 +545,23 @@ export class Islands {
         lanternGlow: lanternMat,
       };
       const built = structure(kind, own, state.status, rnd);
-      mergeStatic(built.group, built.signal);
+      // Swap every sprite for an anchor; the GlowBatch draws them all in one call.
+      const glows: IslandView["glows"] = [];
+      const sprites: THREE.Sprite[] = [];
+      built.group.traverse((o) => {
+        if (o instanceof THREE.Sprite) sprites.push(o);
+      });
+      for (const sp of sprites) {
+        const anchor = new THREE.Object3D();
+        anchor.position.copy(sp.position);
+        sp.parent?.add(anchor);
+        sp.removeFromParent();
+        glows.push({ anchor, size: sp.scale.x, lantern: sp.material === lanternMat });
+      }
+      // The signal shares its per-island material with lock/vault rings: merge them together.
+      mergeStatic(built.group, null);
       root.add(islet, built.group);
+      if (this.flavour === "flat") mergeFlatBody(root, this.flatBody, new Set([signalMat, windowMat]));
       root.position.set(state.place.x, 0, state.place.z);
       this.root.add(root);
       const shore = new THREE.Vector3(state.place.x, state.place.z, 1.35);
@@ -487,6 +573,7 @@ export class Islands {
         windowMat,
         glowMat,
         lanternMat,
+        glows,
         phase: unitNoise(state.id, 71) * 10,
         shore,
       });
@@ -507,6 +594,8 @@ export class Islands {
 
   dispose(): void {
     this.clear();
+    this.glowBatch.dispose();
+    this.flatBody.dispose();
     const m = this.mats;
     for (const mat of [m.wood, m.darkWood, m.stone, m.paleStone, m.roof, m.metal, m.window, m.rock, m.lanternGlow, ...Object.values(m.status), ...Object.values(m.statusGlow)]) {
       mat.dispose();
