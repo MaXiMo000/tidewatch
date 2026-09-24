@@ -3,7 +3,7 @@
 Audience: Claude Code (or any engineer) picking this project up cold. Read this file, then
 `CLAUDE.md`, then the milestone you are working on in `docs/PLAN.md`.
 
-## 0. Current state: M5 merged (PR #16); M2 (#20), M3 (#21) and M4 (stacked) in review
+## 0. Current state: M5 merged (PR #16); M2 (#20), M3 (#21), M4 (#22), M6 (stacked) in review
 
 **M5 live data is merged** (PR #16): metrics add-ons in AniNest/Quiz-App/LabLedger (`addons/`),
 `LiveSource`, offline islands, Render deployment files, owner risk acceptance in SECURITY.md.
@@ -40,9 +40,23 @@ Blueprint). LabLedger and Quiz-App show **offline** until they are redeployed ne
   6 new E2E tests (free-fly, photo PNG, sound, SR sentence, 2D view, no-WebGL fallback).
 - Initial bundle 178.1 KB gzip. No CSP change.
 
+**M6 hardening** (branch `m6-hardening`, stacked on M4):
+- Trusted Types enforced (`trusted-types 'none'`), verified by all 22 E2E tests against the real
+  compose stack over HTTPS (built locally with a sandbox-only CA tweak, not committed).
+- CI `compose` job now also runs k6 (`scripts/load/ws.js`: 5 of 20 admitted, 429s, memory flat) and
+  a ZAP baseline (`scripts/zap_gate.py`; locally: 1 low, 3 info). ZAP found that Java clients send
+  no SNI for `localhost` -> `default_sni` in the Caddyfile.
+- Performance budget E2E test; `.github/workflows/release.yml` (SBOM + provenance on tags);
+  README with the film GIF; CHANGELOG.
+
+**Owner, to finish v0.1.0:** merge #20 -> #21 -> #22 -> #23 in that order (each is stacked on the
+previous), do the Render steps in `docs/M5-LIVE-PLAN.md` s.5, then tag: `git tag v0.1.0 && git push
+origin v0.1.0` (the release workflow builds, generates the SBOM, attests and publishes). After the
+deploy, check the real domain's headers (`curl -I`) and securityheaders.com (SECURITY.md s.7).
+
 Not verified: iOS Safari, Android Chrome, desktop Firefox; real low-end hardware; fps on real GPUs;
-a real screen reader (NVDA/VoiceOver); sinking boats caught mid-sink on camera.
-Next: **M6** (Trusted Types, ZAP, k6, Lighthouse budget, SBOM + provenance, README, v0.1.0).
+a real screen reader (NVDA/VoiceOver); sinking boats caught mid-sink on camera; the ZAP and k6 CI
+steps on GitHub's runners (both ran locally against the same stack); the release workflow (needs a tag).
 
 Rules unchanged: app repos may have **uncommitted local work that is not ours - never stage,
 stash, reset or discard it**; don't curl the apps' live URLs without asking.
@@ -64,7 +78,7 @@ stash, reset or discard it**; don't curl the apps' live URLs without asking.
   suite ran against `mongo:7` and Quiz-App's `mongodb-memory-server` used the image's `mongod`
   (`MONGOMS_SYSTEM_BINARY`) because the sandbox blocks fastdl.mongodb.org.
 
-## 1. Where things stand (M0, M1, art pass, M5 merged; M2-M4 in review; then M6)
+## 1. Where things stand (M0, M1, art pass, M5 merged; M2-M6 in review; then v0.1.0)
 
 ### Built
 - **Backend** (`backend/app/`): config validation, strict schemas, security primitives,

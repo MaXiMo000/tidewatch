@@ -30,6 +30,8 @@ FRONTEND_CSP = (
     "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; "
     "font-src 'self'; connect-src 'self' wss://{domain}; worker-src 'self' blob:; "
     "object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'; "
+    # Trusted Types, enforced (M6): no DOM XSS sink may take a string. The app has none to offer.
+    "require-trusted-types-for 'script'; trusted-types 'none'; "
     "upgrade-insecure-requests"
 )
 API_CSP = "default-src 'none'; frame-ancestors 'none'"

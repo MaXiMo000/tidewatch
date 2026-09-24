@@ -1,0 +1,61 @@
+name: release
+# Runs only when the owner pushes a version tag (v0.1.0, ...). Builds the release artefacts from the
+# lockfiles, generates an SPDX SBOM of the whole repository, attests build provenance for every
+# artefact (Sigstore, verifiable with `gh attestation verify`), and publishes a GitHub release.
+on:
+  push:
+    tags: ["v*.*.*"]
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # create the release
+      id-token: write # Sigstore signing for the attestations
+      attestations: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Build the frontend from the lockfile
+        working-directory: frontend
+        run: |
+          npm ci --ignore-scripts
+          npm run build
+          npm run check:bundle
+      - name: Package artefacts
+        run: |
+          mkdir -p out
+          tar -C frontend/dist -czf "out/tidewatch-frontend-${GITHUB_REF_NAME}.tar.gz" .
+          # Backend as shipped: source + the hash-pinned lock the Docker image installs from.
+          tar -czf "out/tidewatch-backend-${GITHUB_REF_NAME}.tar.gz" \
+            backend/app backend/requirements.lock backend/pyproject.toml backend/Dockerfile deploy
+          (cd out && sha256sum ./*.tar.gz > SHA256SUMS)
+      - name: SBOM (SPDX, whole repository incl. both lockfiles)
+        uses: anchore/sbom-action@3ad7283483fc7af8ff2b4ea19663c2d5ca935e26 # v0.24.2
+        with:
+          path: .
+          format: spdx-json
+          output-file: out/tidewatch-${{ github.ref_name }}.spdx.json
+          upload-artifact: false
+          upload-release-assets: false
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: |
+            out/*.tar.gz
+            out/*.spdx.json
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" out/* \
+            --repo "$GITHUB_REPOSITORY" --title "Tidewatch $GITHUB_REF_NAME" --generate-notes --verify-tag

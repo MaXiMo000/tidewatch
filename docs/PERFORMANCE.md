@@ -52,7 +52,9 @@ mid-tier GPU) and test on real hardware, not only throttled desktop Chrome.
 - Scroll cost: `node frontend/scripts/perf-scroll.mjs --tier low [--throttle 4] [--idle 1]` (dev
   server): renderer main-thread ms per frame while wheel-scrolling the film, vs idle.
 - Chrome Performance panel with 4x CPU throttle for quick checks; real-device checks before each milestone closes.
-- Lighthouse CI budget (M6). Bundle-size check in CI (fail on > budget).
+- Performance budget test in the E2E suite (M6, against the compose stack): first contentful paint
+  < 2.5 s, total transfer before the first frame < 1.5 MB, JS < 400 KB, only our own origin. The
+  browser's own timing APIs, not Lighthouse (no new dependency). Bundle-size check in CI too.
 - Record results per milestone in `docs/HANDOVER.md` so regressions are visible.
 - CI: `npm run check:bundle` fails the build over the 350 KB gzip initial-JS budget.
 

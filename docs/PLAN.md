@@ -148,11 +148,21 @@ foundations come before spectacle.
   Still open from the original scope: OIDC - replaced for now by the owner's risk acceptance - and
   the Redis-backed ticket store for multi-instance.)
 
-### M6 - Hardening and launch
-- Enforce Trusted Types (report-only first); ZAP baseline scan in CI; k6 WebSocket load test;
-  Lighthouse performance budget in CI; SBOM + build provenance attestation.
-- Screenshots/GIF for the README, docs polish, `v0.1.0` release.
-- **Accept:** every item in `docs/SECURITY.md` section 7 is ticked with evidence.
+### M6 - Hardening and launch (built 2026-09-24)
+- [x] Trusted Types **enforced** directly (no report-only phase needed: the bundle has no DOM XSS
+  sink, and all E2E tests pass under enforcement against the compose stack).
+- [x] ZAP baseline scan in CI (`scripts/zap_gate.py`: medium/high fail). Found and fixed on the way:
+  Java clients send no SNI for `localhost`, so Caddy refused them - `default_sni` set.
+- [x] k6 WebSocket load test in CI (`scripts/load/ws.js`): caps, 429s, memory flat.
+- [x] Performance budget in CI - **deviation:** measured by the browser in the E2E suite (first
+  paint, bytes before the first frame, JS bytes, no third-party origins) instead of adding
+  Lighthouse as a dependency.
+- [x] SBOM + build provenance: `.github/workflows/release.yml` on `v*.*.*` tags.
+- [x] README with the film GIF and screenshots; CHANGELOG.
+- [ ] `v0.1.0` release - **owner**: merge #20-#23, then tag (see HANDOVER).
+- **Accept:** SECURITY.md s.7 is ticked with evidence except three items that need the real
+  deployment or the release tag (headers on the real domain, securityheaders.com grade, the first
+  published SBOM) - each says what remains and who does it.
 
 ## 5. Decisions already made (change only with a written reason)
 
