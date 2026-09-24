@@ -6,6 +6,10 @@
  *   queue = jetty with crates, worker = workshop with a chimney.
  * Warm lantern windows everywhere; a status-coloured signal light per structure (Round 3 animates
  * it: amber pulse, red flicker). Procedural PBR materials; no model files.
+ *
+ * Draw calls do not grow with the number of islands: after building each islet, all of them are
+ * merged per material into one mesh (scene/island-batch.ts). Per-island placement, traffic scale,
+ * facing and status/window light live in a float texture updated each frame.
  */
 import * as THREE from "three";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
@@ -14,6 +18,7 @@ import { unitNoise } from "./layout";
 import type { IslandState, Status, WorldModel } from "./model";
 import { isletScale, type Silhouette, silhouetteFor } from "./silhouette";
 import { GlowBatch } from "./glows";
+import { IslandBatch, MAX_ISLANDS, tagIsland } from "./island-batch";
 import { mulberry32 } from "./random";
 
 const STATUS_HEX: Record<Status, number> = {
@@ -401,10 +406,11 @@ function mergeFlatBody(root: THREE.Group, body: THREE.Material, live: Set<THREE.
 
 interface IslandView {
   state: IslandState;
+  /** Batch index (row in the island texture). */
+  index: number;
+  /** Transform holder (no meshes): placement for the glow anchors and the texture. */
   root: THREE.Group;
-  /** Per-island materials so each islet can pulse / flicker with its own health. */
-  signalMat: Lit;
-  windowMat: Lit;
+  /** Per-island glow colours for the GlowBatch (sprite materials used only as value holders). */
   glowMat: THREE.SpriteMaterial;
   lanternMat: THREE.SpriteMaterial;
   /** Glow anchors (former sprites) rendered through the shared GlowBatch. */
@@ -444,10 +450,19 @@ export class Islands {
   /** Flat materials cannot go far above 1 emissive without clipping; Cinematic uses HDR values. */
   private readonly emissiveScale: number;
   private glowsEnabled = true;
+  private readonly batch = new IslandBatch();
+  /** One shared material each for every island's status light and windows (colour per island). */
+  private readonly signalMat: Lit;
+  private readonly windowMat: Lit;
+  private batchMeshes: THREE.Mesh[] = [];
 
   constructor(private readonly flavour: Flavour = "pbr") {
     this.mats = makeMats(flavour);
     this.emissiveScale = flavour === "pbr" ? 1 : 0.25;
+    this.signalMat = this.mats.status.ok.clone();
+    this.windowMat = this.mats.window.clone();
+    this.batch.patch(this.signalMat, 1);
+    this.batch.patch(this.windowMat, 2);
     this.root.add(this.glowBatch.mesh);
   }
 
@@ -480,6 +495,7 @@ export class Islands {
       const scale = isletScale(v.state.scale);
       v.root.scale.setScalar(scale);
       v.shore.set(v.root.position.x, v.root.position.z, 1.35 * scale);
+      this.batch.setPlacement(v.index, v.root.position.x, v.root.position.z, scale, v.root.rotation.y);
       const w = v.state.weight;
       // Signal colour cross-fades between statuses with the eased weights (no popping).
       const { ok, degraded, failing, offline } = STATUS_COLOURS;
@@ -495,16 +511,18 @@ export class Islands {
       const pulse = reducedMotion ? 0.5 : 0.5 + 0.5 * Math.sin(t * 5);
       const flicker = reducedMotion ? 0.6 : smoothNoise(t * 2.2, v.phase * 13);
       const intensity = 3.5 + w.degraded * (1 + 4 * pulse) + w.failing * (2 + 6 * flicker);
-      v.signalMat.emissive.copy(this.tmp);
-      v.signalMat.emissiveIntensity = (intensity * lit + 0.6 * w.offline) * this.emissiveScale;
+      const signal = (intensity * lit + 0.6 * w.offline) * this.emissiveScale;
+      this.batch.setEmissive(v.index, 1, this.tmp.r * signal, this.tmp.g * signal, this.tmp.b * signal);
       v.glowMat.color.copy(this.tmp);
       v.glowMat.opacity = (0.35 + w.degraded * 0.35 * pulse + w.failing * 0.5 * flicker) * lit;
       // Windows: warm when healthy; dim and pulse when degraded; reddish, stuttering when failing.
-      v.windowMat.emissive.copy(WARM).lerp(RED_WINDOW, w.failing * 0.6);
-      v.windowMat.emissiveIntensity =
+      this.tmp.copy(WARM).lerp(RED_WINDOW, w.failing * 0.6);
+      const win =
         5.5 * this.emissiveScale * lit * (1 - w.degraded * 0.35 * (1 - pulse) - w.failing * (0.55 - 0.45 * flicker));
+      this.batch.setEmissive(v.index, 2, this.tmp.r * win, this.tmp.g * win, this.tmp.b * win);
       v.lanternMat.opacity = 0.5 * lit * (1 - w.failing * 0.4 * (1 - flicker));
     }
+    this.batch.commit();
     // All glows in one draw call per pass.
     if (!this.glowsEnabled) return;
     this.glowBatch.begin();
@@ -520,6 +538,11 @@ export class Islands {
     this.glowBatch.end();
   }
 
+  /** Draw calls the islets themselves cost (one per material, whatever the island count). */
+  get batchCount(): number {
+    return this.batchMeshes.length;
+  }
+
   get meshCount(): number {
     let n = 0;
     this.root.traverse((o) => {
@@ -531,7 +554,11 @@ export class Islands {
   private rebuild(model: WorldModel): void {
     this.clear();
     this.builtVersion = model.topologyVersion;
+    // Geometry of every island, grouped by the material it will be drawn with.
+    const buckets = new Map<THREE.Material, THREE.BufferGeometry[]>();
+    let index = 0;
     for (const state of model.islands.values()) {
+      if (index >= MAX_ISLANDS) break;
       const rnd = mulberry32(Math.floor((unitNoise(state.id, 9) + 1) * 1e6));
       const root = new THREE.Group();
       root.name = state.id;
@@ -541,8 +568,8 @@ export class Islands {
         isletGeometry(state.id, radius, this.flavour === "pbr" ? 4 : 2),
         this.mats.rock,
       );
-      islet.receiveShadow = true;
-      islet.castShadow = true;
+      // Per-island stand-ins while building; in the batch they become the shared signal/window
+      // materials, coloured per island from the texture.
       const signalMat = this.mats.status.ok.clone();
       const windowMat = this.mats.window.clone();
       const glowMat = this.mats.statusGlow.ok.clone();
@@ -568,44 +595,84 @@ export class Islands {
         sp.removeFromParent();
         glows.push({ anchor, size: sp.scale.x, lantern: sp.material === lanternMat });
       }
-      // The signal shares its per-island material with lock/vault rings: merge them together.
       mergeStatic(built.group, null);
       root.add(islet, built.group);
       if (this.flavour === "flat") mergeFlatBody(root, this.flatBody, new Set([signalMat, windowMat]));
+      // Move every mesh's geometry (in island-local space) into its material's bucket.
+      root.updateMatrixWorld(true);
+      const meshes: THREE.Mesh[] = [];
+      root.traverse((o) => {
+        if (o instanceof THREE.Mesh) meshes.push(o);
+      });
+      for (const mesh of meshes) {
+        const source = mesh.material as THREE.Material;
+        const target = source === signalMat ? this.signalMat : source === windowMat ? this.windowMat : source;
+        const colour = (target as THREE.MeshLambertMaterial).vertexColors === true;
+        const g = tagIsland(mesh.geometry, index, colour);
+        g.applyMatrix4(mesh.matrixWorld);
+        const list = buckets.get(target) ?? [];
+        list.push(g);
+        buckets.set(target, list);
+        mesh.removeFromParent();
+        mesh.geometry.dispose();
+      }
+      signalMat.dispose();
+      windowMat.dispose();
       root.position.set(state.place.x, 0, state.place.z);
       this.root.add(root);
       const shore = new THREE.Vector3(state.place.x, state.place.z, 1.35);
       this.shores.push(shore);
       this.views.push({
         state,
+        index,
         root,
-        signalMat,
-        windowMat,
         glowMat,
         lanternMat,
         glows,
         phase: unitNoise(state.id, 71) * 10,
         shore,
       });
+      index += 1;
+    }
+    for (const [material, geos] of buckets) {
+      const merged = mergeGeometries(geos);
+      for (const g of geos) g.dispose();
+      if (!merged) continue;
+      this.batch.patch(material);
+      const mesh = new THREE.Mesh(merged, material);
+      // The shader places each island; bounds of the unplaced geometry would cull wrongly.
+      mesh.frustumCulled = false;
+      if (this.flavour === "pbr") {
+        mesh.castShadow = true;
+        mesh.receiveShadow = true;
+        mesh.customDepthMaterial = this.batch.depthMaterial;
+      }
+      this.batchMeshes.push(mesh);
+      this.root.add(mesh);
     }
   }
 
   private clear(): void {
     this.shores.length = 0;
     for (const v of this.views) {
-      for (const m of [v.signalMat, v.windowMat, v.glowMat, v.lanternMat]) m.dispose();
+      for (const m of [v.glowMat, v.lanternMat]) m.dispose();
       this.root.remove(v.root);
-      v.root.traverse((o) => {
-        if (o instanceof THREE.Mesh) o.geometry.dispose();
-      });
     }
     this.views = [];
+    for (const mesh of this.batchMeshes) {
+      this.root.remove(mesh);
+      mesh.geometry.dispose();
+    }
+    this.batchMeshes = [];
   }
 
   dispose(): void {
     this.clear();
     this.glowBatch.dispose();
     this.flatBody.dispose();
+    this.batch.dispose();
+    this.signalMat.dispose();
+    this.windowMat.dispose();
     const m = this.mats;
     for (const mat of [m.wood, m.darkWood, m.stone, m.paleStone, m.roof, m.metal, m.window, m.rock, m.lanternGlow, ...Object.values(m.status), ...Object.values(m.statusGlow)]) {
       mat.dispose();

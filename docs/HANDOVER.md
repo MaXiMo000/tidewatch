@@ -49,14 +49,30 @@ Blueprint). LabLedger and Quiz-App show **offline** until they are redeployed ne
 - Performance budget E2E test; `.github/workflows/release.yml` (SBOM + provenance on tags);
   README with the film GIF; CHANGELOG.
 
-**Owner, to finish v0.1.0:** merge #20 -> #21 -> #22 -> #23 in that order (each is stacked on the
-previous), do the Render steps in `docs/M5-LIVE-PLAN.md` s.5, then tag: `git tag v0.1.0 && git push
+**Island batching** (branch `perf-island-batching`, after M6): every islet and structure is merged
+per material across ALL islands (`scene/island-batch.ts`); each vertex carries its island index and
+reads placement (x, z, traffic scale, yaw) and signal / window emissive from one small float texture
+(texelFetch in patched shaders; a patched depth material keeps Cinematic's shadows). Draw calls no
+longer grow with the number of services. Measured (headless SwiftShader, `?debug=1`, `#chapter-hops`):
+
+| Topology | Simple calls / tris | Balanced calls / tris | Cinematic calls / tris |
+| --- | --- | --- | --- |
+| Demo, 7 islands, before -> after | - | 25 -> 11 / 14.2k -> 15.2k | 134 -> 92 / 377k -> 384k |
+| 41 islands (8 apps x 4 deps, fake metrics server), before -> after | 121 -> 9 / 30.7k | 122 -> 10 / 37k | 816 -> 238 / 504k |
+
+Triangles rise slightly because the merged meshes are not frustum-culled per island. Still over
+budget at 41 islands: triangles on every tier (Simple 30.7k vs 10k) and Cinematic calls (238 vs
+200, from the other layers). Real topologies (M5 apps) are 3-8 islands, inside budget; a per-tier
+islet detail level would be the next step if larger topologies appear. Before/after screenshots on
+Balanced and Cinematic are visually equivalent. 5 new unit tests; all 22 E2E pass (vite preview).
+
+**Merged:** #20 -> #21 -> #22 -> #23 (main `3adef88`). **Owner, to finish v0.1.0:** do the Render steps in `docs/M5-LIVE-PLAN.md` s.5, then tag: `git tag v0.1.0 && git push
 origin v0.1.0` (the release workflow builds, generates the SBOM, attests and publishes). After the
 deploy, check the real domain's headers (`curl -I`) and securityheaders.com (SECURITY.md s.7).
 
 Not verified: iOS Safari, Android Chrome, desktop Firefox; real low-end hardware; fps on real GPUs;
-a real screen reader (NVDA/VoiceOver); sinking boats caught mid-sink on camera; the ZAP and k6 CI
-steps on GitHub's runners (both ran locally against the same stack); the release workflow (needs a tag).
+a real screen reader (NVDA/VoiceOver); sinking boats caught mid-sink on camera; the release workflow
+(needs a tag). The ZAP and k6 steps now pass on GitHub's runners (CI `compose` job).
 
 Rules unchanged: app repos may have **uncommitted local work that is not ours - never stage,
 stash, reset or discard it**; don't curl the apps' live URLs without asking.
@@ -157,7 +173,7 @@ governor stepping down from Cinematic on a genuinely slow GPU (unit-tested only)
 | **M1 acceptance: 60 fps High / 30+ fps Low on the reference low-end device** | No reference device chosen or available. Needs the owner: pick one (PERFORMANCE.md), open `?debug=1` on a dev build, or run the production build and watch the tier the governor settles on |
 | Governor stepping down on real slow hardware | Logic unit-tested with synthetic frames; not observed on a genuinely slow GPU |
 | iOS Safari / Android Chrome / Firefox | Only Chrome and Edge on Windows, and headless Chrome (SwiftShader) in CI |
-| Draw calls scale per island (5 on High/Medium, 3 on Low) | Fine for the 7-service demo (38 calls). Budgets are hit at ~19 services on Low (60) and ~29 on High (150): instance islands before real topologies arrive (M3/M5) |
+| Triangles scale per island | Island draw calls are batched (constant per material, see "Island batching" above), but triangles still grow: ~0.75k per island on Simple, over its 10k budget beyond ~13 islands. Real M5 topologies are 3-8 islands |
 | Deployment on a real public host / real domain / Let's Encrypt | Only `localhost` tested |
 | `pre-commit` hooks | Not installed locally; gitleaks ran manually before each commit |
 | Starlette `httpx` TestClient deprecation | Warning only (Starlette asks for `httpx2`); tests pass. Revisit when it becomes an error |
