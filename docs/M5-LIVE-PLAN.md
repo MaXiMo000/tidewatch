@@ -1,6 +1,7 @@
 # M5 - Live data: owner decisions, design, task list
 
-Status: **designed, not started** (branch `m5-live`, based on `main` after PR #15). No code yet.
+Status: **implemented, in review** (PR #16, branch `m5-live`): steps 1-9 below are done; s.5 is the
+owner's part. State and evidence: `docs/HANDOVER.md` s.0.
 Read `docs/HANDOVER.md` section 0 first, then this file.
 
 ## 1. Owner decisions (2026-09-24) - do not re-ask

@@ -89,7 +89,14 @@ foundations come before spectacle.
 - 2D fallback dashboard when WebGL is unavailable or the device is below a minimum tier.
 - **Accept:** a11y pass (keyboard, screen-reader summary of status), fallback verified.
 
-### M5 - Real data + authentication (next, before M2 - owner decision 2026-09-24)
+### M5 - Real data + authentication (done in PR #16, before M2 - owner decision 2026-09-24)
+- [x] Protocol `offline` + `/api/v1/info`, live config, `LiveSource` (SSRF tests, polls only while watched)
+- [x] Frontend offline visuals, live caption, zod sync
+- [x] Render deployment (`render.yaml`, `deploy/render/`, client-IP handling, smoke test in CI)
+- [x] Metrics add-ons (`addons/`) in AniNest, Quiz-App, LabLedger, each with tests, pushed
+- [x] Local end-to-end run with real AniNest data (`docs/screenshots/m5/`)
+- [x] SECURITY.md owner risk acceptance; ARCHITECTURE s.6 rewritten
+- [ ] Owner: tokens + Render Blueprint (`docs/M5-LIVE-PLAN.md` s.5)
 - **Re-scoped:** see `docs/M5-LIVE-PLAN.md` (decisions, design, ordered tasks). Short version: no
   Prometheus; a small metrics add-on in each of the owner's apps (AniNest, LabLedger, Quiz-App),
   polled by a `LiveSource` only while watched; public aggregates-only view (owner risk acceptance
@@ -99,7 +106,9 @@ foundations come before spectacle.
 - Real user auth for live mode (OIDC via an identity-aware proxy or built-in), replacing the API-key gate
   for browsers. Redis-backed ticket store + rate limits for multi-instance deployments.
 - **Accept:** SSRF tests pass; upstream cost is independent of viewer count; no upstream label ever
-  reaches a client without passing through the mapping + schema layer.
+  reaches a client without passing through the mapping + schema layer. (Met for the re-scoped M5.
+  Still open from the original scope: OIDC - replaced for now by the owner's risk acceptance - and
+  the Redis-backed ticket store for multi-instance.)
 
 ### M6 - Hardening and launch
 - Enforce Trusted Types (report-only first); ZAP baseline scan in CI; k6 WebSocket load test;

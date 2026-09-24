@@ -3,26 +3,36 @@
 Audience: Claude Code (or any engineer) picking this project up cold. Read this file, then
 `CLAUDE.md`, then the milestone you are working on in `docs/PLAN.md`.
 
-## 0. Next up: M5 live data (branch `m5-live`) - start here
+## 0. Current state: M5 live data done, PR #16 in review (branch `m5-live`)
 
-M0, M1 and the art pass (PR #15) are **merged**; `main` is green. The owner asked for **real data
-before M2**. Every owner decision, the full design, the ordered task list with acceptance criteria
-and the owner's own to-do list are in **`docs/M5-LIVE-PLAN.md`** - read it completely. Summary:
+M0, M1 and the art pass (PR #15) are merged. M5 (real data before M2, owner decision) is
+implemented on `m5-live` / PR #16 following **`docs/M5-LIVE-PLAN.md`** s.4, steps 1-9 all done:
 
-- Watch the owner's apps **AniNest**, **LabLedger**, **Quiz-App** (local clones next to this repo
-  in `C:\Users\ADMIN\Documents\Personal\`). LabLedger and Quiz-App are down until next month: they
-  must render as **offline** islands, which is expected, not a bug.
-- No Prometheus. Each app gets a tiny vendored metrics add-on serving aggregates at
-  `GET /tidewatch/metrics` (Bearer token); Tidewatch's new `LiveSource` polls them only while
-  someone is watching.
-- **Public, aggregates only** (owner risk acceptance, to be recorded in SECURITY.md).
-- Host on **Render free** (one Docker service: Caddy on `$PORT` + uvicorn, `render.yaml`).
-- App repo changes are **pushed directly to their default branch** (owner's choice). Those repos
-  have **uncommitted local work that is not ours - never stage, stash, reset or discard it.**
-- Don't curl the apps' live URLs without asking (owner declined once).
+- **Backend**: `offline` status + `GET /api/v1/info` (schemas.py and protocol.ts in sync); live
+  config (`TIDEWATCH_LIVE_SOURCES`, `_SOURCE_TOKENS`, `_LIVE_PUBLIC`, `_LIVE_POLL_SECONDS`,
+  `_LIVE_ALLOW_PRIVATE`); `app/live.py` `LiveSource` (SSRF-checked, polls only while watched,
+  strict payload model, mapping to Snapshot; third-party `service` deps judged by errors only).
+- **Frontend**: offline islands on every tier, "n offline" summary, legend row, live caption and
+  display names from `/api/v1/info`.
+- **Deploy**: `render.yaml` + `deploy/render/` (one free Docker service, Caddy on `$PORT` +
+  uvicorn on loopback, client-IP handling), `scripts/smoke_render.py` in CI.
+- **Apps** (pushed to their default branches, CI green, inert until the token env var is set):
+  AniNest `master` d851dc3 (db = libSQL, anime-api = Jikan/AniList), Quiz-App `main` 59682c4
+  (db = MongoDB command monitoring, cache = Redis via cacheService, ai = Gemini), LabLedger `main`
+  0e65795 (db = pymongo CommandListener, queue = arq enqueue, ai = Gemini). Canonical add-ons:
+  `addons/`.
+- **Verified end to end locally** with real AniNest data: `docs/screenshots/m5/`.
+- **Docs**: SECURITY.md (owner risk acceptance s.8, T5/T6/T15/T16/T24/T25), ARCHITECTURE s.3/s.6/s.7,
+  PLAN M5, `.env.example`.
 
-State of `m5-live`: this handoff commit only; no M5 code yet. Nothing in the three app repos has
-been changed.
+**Next:** the owner reviews/merges PR #16 and does the Render steps in `docs/M5-LIVE-PLAN.md` s.5
+(tokens, env vars, Blueprint). LabLedger and Quiz-App show **offline** until they are redeployed
+next month with their token set - expected, not a bug. Then M2.
+
+Not verified: a real Render deploy (needs the owner's account); the apps' deployed endpoints
+(deliberately never contacted); fps of the live view on real GPUs (screenshots used SwiftShader).
+Rules unchanged: app repos may have **uncommitted local work that is not ours - never stage,
+stash, reset or discard it**; don't curl the apps' live URLs without asking.
 
 ### Session environment notes (Windows 11 laptop, Intel UHD)
 - Shells: PowerShell (primary) and Git Bash. Python venv at `backend/.venv/Scripts/python.exe`.
@@ -37,8 +47,11 @@ been changed.
 - Commit trailer: `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`; PR body ends with
   `🤖 Generated with [Claude Code](https://claude.com/claude-code)`.
 - Open Dependabot PRs for Python 3.14 and TypeScript 7 are **owner decisions** - leave them.
+- Steps 5-9 of M5 ran in a Claude Code cloud session (Linux): Docker works there, so LabLedger's
+  suite ran against `mongo:7` and Quiz-App's `mongodb-memory-server` used the image's `mongod`
+  (`MONGOMS_SYSTEM_BINARY`) because the sandbox blocks fastdl.mongodb.org.
 
-## 1. Where things stand (M0, M1, art pass merged - M5 live data next, then M2)
+## 1. Where things stand (M0, M1, art pass merged; M5 live data in PR #16; then M2)
 
 ### Built
 - **Backend** (`backend/app/`): config validation, strict schemas, security primitives,
@@ -147,13 +160,11 @@ cd ../frontend && E2E_BASE_URL=https://localhost E2E_CHANNEL=chrome npm run e2e 
 
 ## 3. Suggested prompt for Claude Code
 
-> Read `CLAUDE.md`, `docs/HANDOVER.md` (section 0 first), `docs/M5-LIVE-PLAN.md`, `docs/SECURITY.md`
-> and `docs/ARCHITECTURE.md` in `C:\Users\ADMIN\Documents\Personal\tidewatch`. Continue on branch
-> `m5-live` and implement M5 live data following `docs/M5-LIVE-PLAN.md` section 4 in order. Owner
-> decisions there are final - don't re-ask them. Same rules as always, one commit per step, CI green.
-> Finish with the Tidewatch PR and the owner's step list, then stop for review.
+> Read `CLAUDE.md`, `docs/HANDOVER.md` (section 0 first) and `docs/PLAN.md`. Complete Milestone M2
+> exactly as described there, with the same rules as always: one commit per step, CI green, docs in
+> sync, then stop for review.
 
-After M5: "Complete Milestone M2", then M3, M4, M6, with the same rules each time.
+Then M3, M4, M6, with the same rules each time.
 
 ## 4. Publishing and GitHub settings
 
