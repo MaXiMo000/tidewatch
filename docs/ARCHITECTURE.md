@@ -130,7 +130,10 @@ Goal: real metrics in, only allowlisted aggregates out.
 
 `deploy/docker-compose.yml`: Caddy (public) + backend (private network). Backend container is
 non-root, read-only filesystem, all capabilities dropped, `no-new-privileges`, memory/PID limits.
-Frontend is built to static files and served by Caddy. Config only via environment.
+The backend network is `internal: true` (no route out; M5 adapters get a dedicated egress network).
+The image installs only hash-verified wheels from `backend/requirements.lock`; base images are
+pinned by digest. Frontend is built to static files and served by Caddy. Config only via
+environment. `scripts/smoke_compose.py` checks the running stack (also run by the CI `compose` job).
 
 ## 8. Testing strategy
 

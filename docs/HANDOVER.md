@@ -3,63 +3,78 @@
 Audience: Claude Code (or any engineer) picking this project up cold. Read this file, then
 `CLAUDE.md`, then the milestone you are working on in `docs/PLAN.md`.
 
-## 1. Where things stand (scaffold, "M0 not yet done")
+## 1. Where things stand (M0 done - next: M1)
 
 ### Built
-- **Backend skeleton** (`backend/app/`): config validation, strict schemas, security primitives,
+- **Backend** (`backend/app/`): config validation, strict schemas, security primitives,
   WebSocket hub with bounded queues, demo data source, hardened API + WebSocket endpoints.
-- **Backend tests** (`backend/tests/test_security.py`): 14 tests covering headers, trusted hosts, Origin
+- **Backend tests** (`backend/tests/test_security.py`): 31 tests covering headers, trusted hosts, Origin
   check, single-use tickets, auth timeout, oversized/garbage auth, rate limit, connection cap,
-  config validation, schema strictness, prod docs disabled.
-- **Frontend skeleton** (`frontend/src/`): zod protocol mirror + tests, reconnecting client with
-  first-message auth, store, placeholder scene.
-- **Deploy** (`deploy/`): Caddyfile (TLS + strict CSP + single origin) and hardened compose file.
-- **Repo hygiene**: `.gitignore`, `.env.example`, pre-commit (gitleaks etc.), CI (backend, frontend,
-  gitleaks, CodeQL) with **commit-SHA-pinned actions**, Dependabot, `SECURITY.md`, MIT license,
-  `scripts/publish.sh` and `scripts/harden-repo.sh`.
+  config validation (incl. wildcard/non-exact hosts and origins), schema strictness, prod docs disabled.
+- **Frontend** (`frontend/src/`): zod protocol mirror + tests, reconnecting client with
+  first-message auth, store, placeholder scene. `package-lock.json` committed.
+- **Deploy** (`deploy/`): Caddyfile (TLS + strict CSP + single origin) and hardened compose file;
+  backend image installs only from the hash-pinned `backend/requirements.lock`; base images pinned by digest.
+- **Repo hygiene**: public at `github.com/MaXiMo000/tidewatch` with `scripts/harden-repo.sh` applied;
+  CI (backend, frontend, compose smoke test, gitleaks, CodeQL) with SHA-pinned actions (enforced by
+  the repo setting), Dependabot (pip, npm, actions, docker, docker-compose).
 
-### Verified in the authoring environment
-The environment that produced this scaffold had **no access to PyPI or npm**, so dependency-based tooling could not run.
-
+### Verified (M0, 2026-09-24)
 | Item | Result |
 | --- | --- |
-| `config.py`, `schemas.py`, `security.py`, `demo.py`, `hub.py` | Exercised with an ad-hoc script (validation rules, strict schemas, ticket single-use/expiry, digests-only storage, limiters, bounded queues, incident cycle reaches degraded/failing): **passed** |
-| `SecurityHeadersMiddleware` + `TrustedHostMiddleware` on a plain Starlette app | **passed** |
-| All Python files compile | **passed** |
+| Backend: `pytest` (31), `ruff`, `mypy --strict app tests`, `bandit`, `pip-audit` (venv + `requirements.lock`) | **pass** locally and in CI |
+| Frontend: `npm ci --ignore-scripts`, `typecheck`, `vitest` (3), `build`, `npm audit` | **pass**, 0 vulnerabilities; JS 132.5 KB gzip (budget 350) |
+| Dev stack end-to-end (Vite proxy -> uvicorn) | HUD reads `live · seq N`, seq advances at 1 Hz |
+| `docker compose up` over HTTPS (Caddy local CA) | `scripts/smoke_compose.py`: **32/32 checks pass** locally (Docker Desktop) and in the CI `compose` job |
+| Backend isolation | no published port; unreachable from host, default bridge and Caddy's public network; no internet egress |
+| Response headers vs `deploy/Caddyfile` | exact match on `/` and `/api/*`; API keeps its own `default-src 'none'` CSP; no `Server`/`Via` |
+| CI on PR | backend, frontend, compose, gitleaks, CodeQL (python, js/ts) all green; no Node 20 warnings |
+| `scripts/harden-repo.sh` | every call `ok`; each setting read back via the API and matches |
 
-### NOT verified (do these first - this is M0)
-| Item | Why unverified |
+### What M0 found wrong in the scaffold
+| Item | Finding | Fix |
+| --- | --- | --- |
+| `main.py` + pytest | Worked first time (14/14) | - |
+| ruff / mypy | 3 lines > 100 chars; unused `type: ignore` in `demo.py`; test fixture typing | Typed the service table with `Kind`; wrapped lines |
+| Config validation | Only rejected the literal `"*"`: `*.example.com` hosts (a Starlette wildcard) and non-exact origins were accepted | Exact hostnames / `scheme://host[:port]` origins only; 17 tests |
+| Frontend `tsc` | `status` possibly null inside the render-loop closure | Re-bound checked nodes as non-null consts |
+| `package.json` versions | vite 5 / vitest 2 had 5 dev-only advisories (1 critical, 1 high) | vite 8.3, vitest 5.0 (needs Node >= 22.12) |
+| Compose healthcheck | Always 400 (TrustedHost rejects `127.0.0.1`): backend would never be healthy | Healthcheck sends the configured Host; Caddy waits for healthy |
+| Caddyfile | Site-wide CSP overwrote the API's stricter CSP; `Via: 1.1 Caddy` leaked the proxy | CSP scoped to static files; `-Via` |
+| Compose network | Backend had open internet egress | `internal: true` on the backend network |
+| Dockerfile | `pip install .` (unpinned, unhashed) | `--require-hashes --no-deps` from `requirements.lock`, app run from source |
+| CI actions | Pins targeted Node 20, removed from hosted runners 2026-09-16 | Re-pinned to checkout v7.0.1, setup-python v7.0.0, setup-node v7.0.0, gitleaks-action v3.0.0, codeql v4.38.1 |
+| `harden-repo.sh` | Worked, but SHA pinning was not enforced and only 3 checks were required | `sha_pinning_required`; all 6 CI checks required |
+
+### Still NOT verified
+| Item | Why |
 | --- | --- |
-| `backend/app/main.py` and `pytest` suite | `fastapi`/`pytest` could not be installed; `main.py` compiles but has never run. Expect small first-run fixes |
-| `ruff`, `mypy --strict`, `bandit`, `pip-audit` | Not installable; `mypy strict` may flag some `type: ignore` comments |
-| Entire frontend (`tsc`, `vitest`, `vite build`) | npm registry unreachable; **no `package-lock.json` exists yet**, so CI's `npm ci` will fail until you create and commit it |
-| Docker build and `docker compose up` | No Docker available |
-| GitHub workflows, `scripts/harden-repo.sh` | Never executed against a real repo; API calls written from the docs |
-| Dependency versions in `package.json` | Chosen from memory of released versions; let `npm install` and Dependabot settle them |
+| Real browser against the compose stack (`https://localhost`) | The local CA is not trusted by the preview browser; the same built assets were checked in the dev stack and all headers/WS behaviour by the smoke test. Check once with the CA installed |
+| Deployment on a real public host / real domain / Let's Encrypt | Only `localhost` tested |
+| `pre-commit` hooks | Not installed locally; gitleaks ran manually before each commit |
+| Starlette `httpx` TestClient deprecation | Warning only (Starlette asks for `httpx2`); tests pass. Revisit when it becomes an error |
 
-## 2. First 30 minutes (M0 checklist)
+## 2. Everyday commands
 
 ```bash
-# 1. Backend
+# 1. Backend (Windows: .venv/Scripts/...)
 cd backend && python -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"
-pytest -x            # fix failures; report anything that suggests a design flaw rather than a typo
-ruff check . && mypy app && bandit -q -r app -c pyproject.toml && pip-audit
+ruff check . && mypy app && bandit -q -r app -c pyproject.toml && pip-audit && pytest
 
-# 2. Frontend
-cd ../frontend && npm install && npm run typecheck && npm test && npm run build
-git add package-lock.json    # commit the lockfile
+# 2. Frontend (Node >= 22.12)
+cd ../frontend && npm ci --ignore-scripts && npm run typecheck && npm test && npm run build
 
-# 3. Full stack
-cd .. && (cd frontend && npm run build) && cd deploy && TIDEWATCH_DOMAIN=localhost docker compose up --build
+# 3. Full stack over HTTPS + smoke test
+cd ../deploy && TIDEWATCH_DOMAIN=localhost docker compose up --build -d --wait
+docker compose cp caddy:/data/caddy/pki/authorities/local/root.crt /tmp/ca.crt
+TIDEWATCH_DOMAIN=localhost ../backend/.venv/bin/python ../scripts/smoke_compose.py --ca /tmp/ca.crt --compose-file docker-compose.yml
 
-# 4. Push and let CI run; fix red checks without loosening them.
+# 4. After changing backend runtime dependencies (needs Docker)
+./scripts/lock-backend.sh
 ```
 
-Then make hash-pinned backend requirements (`pip-compile --generate-hashes`), pin the Docker base
-image digests, and tick the M0 acceptance criteria in `docs/PLAN.md`.
-
-## 3. Suggested first prompt for Claude Code
+## 3. Suggested prompt for Claude Code
 
 > Read `CLAUDE.md`, `docs/HANDOVER.md`, `docs/PLAN.md` and `docs/SECURITY.md`. Complete Milestone M0
 > exactly as described in HANDOVER section 2: get every backend and frontend check green without
@@ -69,20 +84,14 @@ image digests, and tick the M0 acceptance criteria in `docs/PLAN.md`.
 
 Subsequent prompts: "Complete Milestone M1", "M2", ... each with the same rules.
 
-## 4. Publishing the repo (owner action)
+## 4. Publishing and GitHub settings
 
-The scaffold was prepared as a local git repository. Creating it on GitHub requires your logged-in
-GitHub CLI:
-
-```bash
-gh auth login                         # once
-./scripts/publish.sh MaXiMo000 tidewatch
-```
-
-That runs a gitleaks scan, creates the **public** repo, pushes, then applies security settings
-(secret scanning + push protection, private vulnerability reporting, Dependabot, branch protection,
-read-only Actions token). Read its output: any `FAIL` line means a setting must be applied by hand
-in Settings -> Code security / Branches. Repo name is your call - pass another as the second argument.
+Done in M0: `scripts/publish.sh MaXiMo000 tidewatch` created the **public** repo and ran
+`scripts/harden-repo.sh` (secret scanning + push protection, private vulnerability reporting,
+Dependabot alerts + security updates, SHA-pinned actions enforced, read-only Actions token,
+branch protection on `main` requiring all six CI checks, squash-only linear history).
+`harden-repo.sh` is idempotent: re-run it after adding a CI job and add the job to its
+`contexts` list. Any `FAIL` line means a setting must be applied by hand in Settings.
 
 ## 5. Working agreements
 
