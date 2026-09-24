@@ -29,59 +29,61 @@ function canvasTexture(draw: (ctx: CanvasRenderingContext2D, size: number) => vo
   return tex;
 }
 
-/** A clump of feathery cypress sprays: many thin needle-leaf strokes radiating from twigs. */
+/**
+ * A clump of bald-cypress foliage: a dense, slightly lumpy core that frays into feathery needle
+ * sprays at the edge. Tips are lighter so backlight catches them. 512 px so it holds up close.
+ */
 export function leafClusterTexture(): THREE.CanvasTexture {
   return canvasTexture((ctx, s) => {
     const rnd = mulberry32(0xc1c1);
     ctx.clearRect(0, 0, s, s);
-    // Dense rounded core made of overlapping soft blobs, so clumps read as masses, not fronds.
-    for (let i = 0; i < 90; i++) {
+    const cx = s / 2;
+    const cy = s * 0.5;
+    // Core: overlapping lumpy blobs -> a solid mass at distance (mip levels).
+    for (let i = 0; i < 140; i++) {
       const a = rnd() * Math.PI * 2;
-      const r = Math.sqrt(rnd()) * s * 0.3;
-      const x = s / 2 + Math.cos(a) * r;
-      const y = s * 0.47 + Math.sin(a) * r * 0.75;
-      const rad = s * (0.03 + rnd() * 0.05);
-      const shade = 12 + Math.floor(rnd() * 22);
-      ctx.fillStyle = `rgba(${shade + 4},${shade + 18 + Math.floor(rnd() * 10)},${shade + 6},0.95)`;
+      const r = Math.pow(rnd(), 0.7) * s * 0.3;
+      const x = cx + Math.cos(a) * r;
+      const y = cy + Math.sin(a) * r * 0.72;
+      const rad = s * (0.025 + rnd() * 0.05);
+      const g = 18 + Math.floor(rnd() * 26);
+      ctx.fillStyle = `rgba(${g - 4},${g + 16},${g - 2},0.96)`;
       ctx.beginPath();
-      ctx.ellipse(x, y, rad, rad * (0.6 + rnd() * 0.4), rnd() * Math.PI, 0, Math.PI * 2);
+      ctx.ellipse(x, y, rad, rad * (0.55 + rnd() * 0.4), rnd() * Math.PI, 0, Math.PI * 2);
       ctx.fill();
     }
-    const sprays = 34;
+    // Sprays: flat feathery twigs radiating out and drooping, needles alternating both sides.
+    const sprays = 70;
     for (let i = 0; i < sprays; i++) {
-      // Sprays start near the centre-top and droop outward.
       const a = rnd() * Math.PI * 2;
-      const r = s * (0.18 + rnd() * 0.14);
-      const x0 = s / 2 + Math.cos(a) * r;
-      const y0 = s * 0.42 + Math.sin(a) * r * 0.7;
-      const len = s * (0.08 + rnd() * 0.12);
-      const dir = a + (rnd() - 0.5) * 0.8;
-      const droop = 0.35 + rnd() * 0.4;
-      const shade = 14 + Math.floor(rnd() * 26);
-      for (let k = 0; k < 18; k++) {
-        const t = k / 18;
-        const x = x0 + Math.cos(dir) * len * t;
-        const y = y0 + Math.sin(dir) * len * t + droop * len * t * t;
-        const needle = s * 0.028 * (1 - t * 0.6);
-        ctx.strokeStyle = `rgba(${shade + 6},${shade + 22 + Math.floor(rnd() * 14)},${shade + 8},${0.85 + rnd() * 0.15})`;
-        ctx.lineWidth = Math.max(1, s * 0.006);
+      const r0 = s * (0.12 + rnd() * 0.2);
+      let x = cx + Math.cos(a) * r0;
+      let y = cy + Math.sin(a) * r0 * 0.72;
+      const len = s * (0.08 + rnd() * 0.13);
+      const dir = a + (rnd() - 0.5) * 0.7;
+      const droop = 0.2 + rnd() * 0.5;
+      const steps = 16;
+      for (let k = 0; k < steps; k++) {
+        const t = k / steps;
+        const dx = Math.cos(dir) * (len / steps);
+        const dy = Math.sin(dir) * (len / steps) + droop * (len / steps) * t * 2;
+        x += dx;
+        y += dy;
+        const needle = s * 0.022 * (1 - t * 0.55);
+        const nx = -dy / Math.hypot(dx, dy);
+        const ny = dx / Math.hypot(dx, dy);
+        const light = Math.floor(22 + t * 34 + rnd() * 14);
+        ctx.strokeStyle = `rgba(${light - 2},${light + 22},${light + 2},${0.9 - t * 0.2})`;
+        ctx.lineWidth = Math.max(1, s * 0.0045);
         ctx.beginPath();
-        ctx.moveTo(x - needle, y - needle * 0.6);
-        ctx.lineTo(x + needle, y + needle * 0.6);
-        ctx.moveTo(x - needle, y + needle * 0.6);
-        ctx.lineTo(x + needle, y - needle * 0.6);
+        ctx.moveTo(x, y);
+        ctx.lineTo(x + nx * needle + dx * 0.6, y + ny * needle + dy * 0.6);
+        ctx.moveTo(x, y);
+        ctx.lineTo(x - nx * needle + dx * 0.6, y - ny * needle + dy * 0.6);
         ctx.stroke();
       }
     }
-    // Soft fill so the clump has a readable mass at a distance (mip levels).
-    const g = ctx.createRadialGradient(s / 2, s * 0.45, 0, s / 2, s * 0.45, s * 0.36);
-    g.addColorStop(0, "rgba(20,38,24,0.85)");
-    g.addColorStop(1, "rgba(20,38,24,0)");
-    ctx.globalCompositeOperation = "destination-over";
-    ctx.fillStyle = g;
-    ctx.fillRect(0, 0, s, s);
-    ctx.globalCompositeOperation = "source-over";
-  }, 256);
+  }, 512);
 }
 
 /** Hanging Spanish moss: wavy grey-green strands, longest in the middle, fraying at the tips. */

@@ -26,15 +26,38 @@ export interface ViewFrame {
 const shared = {
   uTime: { value: 0 },
   uWind: { value: 1 },
+  uSunDir: { value: new THREE.Vector3(0, 0.1, -1) },
+  uGlowColor: { value: new THREE.Color(0.95, 0.72, 0.52) },
 };
 
-/** Adds wind sway to a standard material (vertex shader only). Taller parts sway more. */
-function withSway(material: THREE.MeshStandardMaterial, amount: number, key: string): THREE.MeshStandardMaterial {
+/**
+ * Adds wind sway to a standard material (vertex shader only). Taller parts sway more.
+ * `glow` > 0 adds backlit translucency: leaves between the eye and the low sun glow warm instead of
+ * reading as flat black cut-outs.
+ */
+function withSway(
+  material: THREE.MeshStandardMaterial,
+  amount: number,
+  key: string,
+  glow = 0,
+): THREE.MeshStandardMaterial {
   material.onBeforeCompile = (shader) => {
     shader.uniforms["uTime"] = shared.uTime;
     shader.uniforms["uWind"] = shared.uWind;
+    shader.uniforms["uSunDir"] = shared.uSunDir;
+    shader.uniforms["uGlowColor"] = shared.uGlowColor;
+    shader.fragmentShader = shader.fragmentShader
+      .replace("#include <common>", "#include <common>\nvarying float vTrans;\nuniform vec3 uGlowColor;")
+      .replace(
+        "#include <emissivemap_fragment>",
+        `#include <emissivemap_fragment>
+        totalEmissiveRadiance += diffuseColor.rgb * uGlowColor * (${glow.toFixed(3)} * vTrans + 0.015);`,
+      );
     shader.vertexShader = shader.vertexShader
-      .replace("#include <common>", "#include <common>\nuniform float uTime;\nuniform float uWind;")
+      .replace(
+        "#include <common>",
+        "#include <common>\nuniform float uTime;\nuniform float uWind;\nuniform vec3 uSunDir;\nvarying float vTrans;",
+      )
       .replace(
         "#include <project_vertex>",
         /* glsl */ `
@@ -49,6 +72,10 @@ function withSway(material: THREE.MeshStandardMaterial, amount: number, key: str
           float s = ${amount.toFixed(4)} * uWind * gust * h * h;
           mvPosition.x += sin(uTime * 0.9 + phase) * s;
           mvPosition.z += cos(uTime * 0.7 + phase * 1.3) * s * 0.6;
+        }
+        {
+          vec3 wp = (modelMatrix * mvPosition).xyz;
+          vTrans = pow(max(dot(normalize(wp - cameraPosition), uSunDir), 0.0), 3.0);
         }
         mvPosition = modelViewMatrix * mvPosition;
         gl_Position = projectionMatrix * mvPosition;`,
@@ -141,6 +168,8 @@ export class Foliage {
   private readonly reeds: Batch;
   private readonly textures: THREE.Texture[];
   private layoutKey = "";
+  /** Crown centres/radii of the trees planted this layout, used to knit neighbouring crowns. */
+  private crowns: { x: number; z: number; y: number; r: number }[] = [];
   private readonly m = new THREE.Matrix4();
   private readonly m2 = new THREE.Matrix4();
   private readonly q = new THREE.Quaternion();
@@ -161,13 +190,14 @@ export class Foliage {
     const leaf = withSway(
       new THREE.MeshStandardMaterial({
         map: leafTex,
-        color: 0x8fa682,
+        color: 0xffffff,
         alphaTest: 0.42,
         side: THREE.DoubleSide,
         roughness: 0.95,
       }),
       0.00022,
       "leaf",
+      1.8,
     );
     const mossMat = withSway(
       new THREE.MeshStandardMaterial({
@@ -195,7 +225,7 @@ export class Foliage {
     this.trunks = batch(trunkGeometry(), bark, MAX_TREES);
     // Capacities: up to 6 branches, 13 clumps x 10 cards and ~26 moss strands per tree.
     this.branches = batch(branchGeometry(), bark, MAX_TREES * 7);
-    this.leaves = batch(cardGeometry(false), leaf, MAX_TREES * 130);
+    this.leaves = batch(cardGeometry(false), leaf, MAX_TREES * 200);
     this.moss = batch(cardGeometry(true), mossMat, MAX_TREES * 28);
     this.knees = batch(new THREE.ConeGeometry(0.22, 1, 6, 1), bark, MAX_TREES * 5);
     const mound = new THREE.ConeGeometry(1, 1, 9, 1, true);
@@ -204,15 +234,16 @@ export class Foliage {
     const bush = withSway(
       new THREE.MeshStandardMaterial({
         map: leafTex,
-        color: 0x7c9670,
+        color: 0xffffff,
         alphaTest: 0.42,
         side: THREE.DoubleSide,
         roughness: 0.95,
       }),
       0.004,
       "bush",
+      1.6,
     );
-    this.bushes = batch(cardGeometry(false), bush, MAX_TREES * 24);
+    this.bushes = batch(cardGeometry(false), bush, MAX_TREES * 30);
     this.pads = batch(lilyGeometry(), pad, 900);
     this.flowers = batch(new THREE.IcosahedronGeometry(0.16, 0), flower, 60);
     this.reeds = batch(reedGeometry(), reed, 900);
@@ -226,7 +257,8 @@ export class Foliage {
       .reduce((n, b) => n + b.count, 0);
   }
 
-  tick(seconds: number, reducedMotion: boolean): void {
+  tick(seconds: number, reducedMotion: boolean, sunDir?: THREE.Vector3): void {
+    if (sunDir) shared.uSunDir.value.copy(sunDir);
     shared.uTime.value = seconds;
     shared.uWind.value = reducedMotion ? 0.15 : 1;
   }
@@ -244,6 +276,7 @@ export class Foliage {
       b.count = 0;
     }
     const rnd = mulberry32(0x7ee5 + model.topologyVersion);
+    this.crowns = [];
     const density = params.foliageDensity;
     const R = model.bounds.radius;
     const O = new THREE.Vector3(model.bounds.cx, 0, model.bounds.cz);
@@ -363,6 +396,37 @@ export class Foliage {
         plantTree(x, z, 22 + rnd() * 8, v.clone().multiplyScalar(-side));
       }
     }
+    // Knit neighbouring crowns into one canopy: each crown links to its two nearest neighbours
+    // with a sagging band of leaf clumps (a continuous mass, like a real swamp canopy).
+    const linked = new Set<string>();
+    this.crowns.forEach((a, i) => {
+      const near = this.crowns
+        .map((b, j) => ({ j, d: Math.hypot(a.x - b.x, a.z - b.z) }))
+        .filter((n) => n.j !== i && n.d > 2 && n.d < (a.r + (this.crowns[n.j]?.r ?? 0)) * 1.7)
+        .sort((p, q) => p.d - q.d)
+        .slice(0, 2);
+      for (const n of near) {
+        const b = this.crowns[n.j];
+        const key = i < n.j ? `${i}-${n.j}` : `${n.j}-${i}`;
+        if (!b || linked.has(key)) continue;
+        linked.add(key);
+        const steps = Math.max(2, Math.round(n.d / 3.5));
+        for (let k = 1; k < steps; k++) {
+          const t = k / steps;
+          const x = a.x + (b.x - a.x) * t;
+          const z = a.z + (b.z - a.z) * t;
+          const y = a.y + (b.y - a.y) * t - Math.sin(t * Math.PI) * Math.min(a.r, b.r) * 0.35;
+          const size = Math.min(a.r, b.r) * 0.7;
+          // Keep the centre of the view open: no bridges across the background near the view axis
+          // (that is where the lit sky and the moon are - the focal point of the shot).
+          const along = (x - O.x) * u.x + (z - O.z) * u.z;
+          const lateral = Math.abs((x - O.x) * v.x + (z - O.z) * v.z);
+          if (along > R * 0.5 && lateral < R * 0.9 + along * 0.35) continue;
+          if (Math.hypot(x - eye.x, z - eye.z) < 10 || blocked(x, z, 3, size)) continue;
+          this.clump(rnd, x, y, z, size, 7);
+        }
+      }
+    });
     // No trees ON islets: with full crowns they hide the structures that identify each service.
 
     // Lily pads: clusters near islets and along the bank shallows, a scatter in open water.
@@ -462,17 +526,38 @@ export class Foliage {
         this.pushMatrix(this.moss, this.m);
       }
     }
+    // A ring of clumps around the upper trunk fills the gaps between branches: one crown mass.
+    const ring = 4 + Math.floor(rnd() * 3);
+    for (let k = 0; k < ring; k++) {
+      const a = (k / ring) * Math.PI * 2 + rnd() * 0.6;
+      const r = height * (0.08 + rnd() * 0.08);
+      clumps.push(new THREE.Vector3(Math.cos(a) * r, height * (0.62 + rnd() * 0.3), Math.sin(a) * r));
+    }
+    // Small far trees get fewer, bigger cards (fog eats detail; saves triangles).
+    const far = height < 11;
     for (const c of clumps) {
-      const cards = 7 + Math.floor(rnd() * 4);
-      const spread = height * 0.085;
+      const cards = far ? 5 + Math.floor(rnd() * 2) : 10 + Math.floor(rnd() * 4);
+      const spread = height * 0.1;
       for (let k = 0; k < cards; k++) {
-        const cp = c.clone().add(new THREE.Vector3((rnd() - 0.5) * spread * 2, (rnd() - 0.3) * spread * 0.7, (rnd() - 0.5) * spread * 2));
+        const cp = c.clone().add(new THREE.Vector3((rnd() - 0.5) * spread * 2, (rnd() - 0.3) * spread * 0.8, (rnd() - 0.5) * spread * 2));
         const cq = new THREE.Quaternion().setFromEuler(this.e.set((rnd() - 0.5) * 0.9, rnd() * Math.PI, (rnd() - 0.5) * 0.5));
-        const size = height * (0.11 + rnd() * 0.07);
+        const size = height * (far ? 0.2 + rnd() * 0.08 : 0.13 + rnd() * 0.09);
         this.m2.compose(cp, cq, new THREE.Vector3(size, size * 0.8, size));
         this.m.multiplyMatrices(treeM, this.m2);
-        this.pushMatrix(this.leaves, this.m);
+        this.pushMatrix(this.leaves, this.m, this.leafTint(rnd));
       }
+    }
+    this.crowns.push({ x, z, y: height * 0.8, r: height * 0.32 });
+  }
+
+  /** A free-standing leaf clump (world coordinates) used to knit crowns together. */
+  private clump(rnd: () => number, x: number, y: number, z: number, size: number, cards: number): void {
+    for (let k = 0; k < cards; k++) {
+      this.p.set(x + (rnd() - 0.5) * size * 1.6, y + (rnd() - 0.4) * size * 0.6, z + (rnd() - 0.5) * size * 1.6);
+      this.q.setFromEuler(this.e.set((rnd() - 0.5) * 0.9, rnd() * Math.PI, (rnd() - 0.5) * 0.5));
+      const c = size * (0.9 + rnd() * 0.6);
+      this.s.set(c, c * 0.8, c);
+      this.push(this.leaves, this.p, this.q, this.s, this.leafTint(rnd));
     }
   }
 
@@ -486,7 +571,7 @@ export class Foliage {
       this.q.setFromEuler(this.e.set((rnd() - 0.5) * 0.5, rnd() * Math.PI, (rnd() - 0.5) * 0.3));
       const c = size * (1.1 + rnd() * 0.7);
       this.s.set(c, c * 0.75, c);
-      this.push(this.bushes, this.p, this.q, this.s);
+      this.push(this.bushes, this.p, this.q, this.s, this.leafTint(rnd));
     }
   }
 
@@ -498,10 +583,21 @@ export class Foliage {
     b.count += 1;
   }
 
-  private pushMatrix(b: Batch, m: THREE.Matrix4): void {
+  private pushMatrix(b: Batch, m: THREE.Matrix4, colour?: THREE.Color): void {
     if (b.count >= b.mesh.instanceMatrix.count) return;
     b.mesh.setMatrixAt(b.count, m);
+    if (colour) b.mesh.setColorAt(b.count, colour);
     b.count += 1;
+  }
+
+  /** Per-card foliage tint: olive to deep green, a few sun-browned sprays, for depth in the mass. */
+  private leafTint(rnd: () => number): THREE.Color {
+    const brown = rnd() < 0.08;
+    return this.c.setHSL(
+      brown ? 0.09 + rnd() * 0.03 : 0.22 + rnd() * 0.1,
+      brown ? 0.35 : 0.25 + rnd() * 0.25,
+      0.3 + rnd() * 0.22,
+    );
   }
 
   dispose(): void {

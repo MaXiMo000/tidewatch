@@ -116,7 +116,7 @@ class CinematicPath implements RenderPath {
     this.refreshEnvironment();
     this.islands.update(this.model, view.eye);
     this.foliage.update(this.model, view);
-    this.foliage.tick(t, this.reducedMotion);
+    this.foliage.tick(t, this.reducedMotion, this.sunDir);
     // Shadow frustum fitted to the archipelago, lit from the low sun (raised a little so shadows
     // stay short enough to read).
     const b = this.model.bounds;
