@@ -182,6 +182,10 @@ class CinematicPath implements RenderPath {
     };
   }
 
+  weatherFlash(): number {
+    return this.drama.flash;
+  }
+
   dispose(): void {
     // A shared object (the film's beacon) belongs to main.ts, not to this path.
     if (this.attached?.parent === this.scene) this.scene.remove(this.attached);

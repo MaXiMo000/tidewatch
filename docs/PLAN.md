@@ -106,11 +106,26 @@ foundations come before spectacle.
     the storm chapter close-up). Budgets hold over a full incident: Simple 26 calls / 8.4k tris,
     Balanced 27 / 15k.
 
-### M4 - Live mode
-- Free-fly camera (mouse/touch/WASD), click island -> metrics panel (sanitised, `textContent`),
-  event feed, photo mode, optional Web Audio ambience (off by default, user-gesture start).
-- 2D fallback dashboard when WebGL is unavailable or the device is below a minimum tier.
-- **Accept:** a11y pass (keyboard, screen-reader summary of status), fallback verified.
+### M4 - Live mode (built 2026-09-24)
+- [x] Free-fly in the live view (`live/freefly.ts`): mouse drag turns, Shift+drag slides, W/S in and
+  out, A/D circle, R/F tilt, 0 or "Reset view" hands back; touch: horizontal drag turns, pinch zooms
+  (vertical stays the page's scroll). Cinematic stays inside its clear channel (tighter limits).
+- [x] Click/tap/Tab an island -> metrics card (since M1; `textContent` only).
+- [x] Event feed of status changes (`live/feed.ts`), live view only; first snapshot is a baseline.
+- [x] Photo mode: P hides every overlay, Save downloads a PNG of the canvas (blob URL, local only).
+- [x] Optional procedural ambience (water, wind with the storm, thunder after lightning): off by
+  default, starts only from the Sound button, lazy chunk (0.9 KB gzip), suspended when hidden.
+- [x] 2D view (`live/fallback2d.ts`): the same live data as an accessible table - automatic when
+  WebGL is unavailable, `?view=2d` or the "2D view" button; suggested (never forced) when the Simple
+  tier still runs under 12 fps for 10 s. The 3D loop does not render while it shows.
+- **Accept:**
+  - [x] a11y: every new control is a real button (keyboard, focus ring, `aria-pressed` for sound),
+    photo mode is keyboard-only operable (P, Enter, Esc), one polite screen-reader status sentence
+    (`#sr-status`: counts + names of anything unhealthy, only when it changes; the visual summary
+    no longer duplicates it), table with row/column headers and a caption in the 2D view.
+  - [x] Fallback verified: E2E with WebGL context creation failing -> 2D view with the reason, no
+    errors; E2E `?view=2d` and back.
+  - [ ] Screen-reader pass with a real reader (NVDA/VoiceOver) - **not done** (no reader here).
 
 ### M5 - Real data + authentication (done in PR #16, before M2 - owner decision 2026-09-24)
 - [x] Protocol `offline` + `/api/v1/info`, live config, `LiveSource` (SSRF tests, polls only while watched)

@@ -59,6 +59,7 @@ Everything crossing 1 and 3 is untrusted input and is validated.
 | T22 | Weak production config | Startup validation: prod requires https origins and >= 32-char keys; live requires keys | `config.py` | done |
 | T23 | Tampered release artefacts | SBOM + build provenance attestation | CI | planned M6 |
 | T24 | Log injection / secret logging | Never log tickets/keys/headers. `LiveSource` logs only `source id: outcome` from a fixed vocabulary, once per change; a test asserts tokens never reach logs | `live.py`, `tests/test_live.py` | done (live); structured logs M6 |
+| T26 | Live-mode extras leaking data or surprising users (M4) | Photo mode saves the canvas locally (`toBlob` -> same-origin blob URL -> `<a download>`), nothing is uploaded; sound is off by default and needs a click (no autoplay); the 2D view and event feed render validated snapshots with `textContent` only; no CSP change was needed | `live/`, `audio/` | done |
 | T25 | The apps' metrics endpoint leaking data or access | Add-on route exists only when `TIDEWATCH_METRICS_TOKEN` is set; token compared in constant time; records only (duration, ok) per request/dependency call - never URLs, routes, bodies, headers, user ids; `no-store`; fixed dependency ids, max 8; tests in each app | `addons/`, the apps' repos | done |
 
 ## 5. Secure development rules

@@ -115,6 +115,10 @@ export class StylisedPath implements RenderPath {
     this.renderer.render(this.scene, camera);
   }
 
+  weatherFlash(): number {
+    return this.weather.flash;
+  }
+
   info(): PathInfo {
     const r = this.renderer.info.render;
     return { calls: r.calls, triangles: r.triangles, gpuBytes: 64 * 64 * 4 };

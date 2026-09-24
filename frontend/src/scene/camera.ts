@@ -178,6 +178,17 @@ export class CameraRig {
     this.base.focus = this.camera.position.distanceTo(this.look);
   }
 
+  /** Where the camera is and what it looks at, this frame (free-fly takes over from here). */
+  currentPose(out: Pose): void {
+    const c = this.camera.position;
+    out.eye.x = c.x;
+    out.eye.y = c.y;
+    out.eye.z = c.z;
+    out.target.x = this.look.x;
+    out.target.y = this.look.y;
+    out.target.z = this.look.z;
+  }
+
   /** Add a small positional offset this frame (the failure shake), after applyStory(). */
   nudge(offset: { x: number; y: number; z: number }): void {
     if (offset.x === 0 && offset.y === 0 && offset.z === 0) return;
