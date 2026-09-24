@@ -9,12 +9,26 @@ Low-end devices are a first-class target. Budgets below are **requirements**; CI
 | Initial JS (gzip) | <= 350 KB (three.js tree-shaken ~150 KB; verify with the build report) |
 | Total transfer before first frame | <= 1.5 MB, no model files required |
 | Time to first rendered frame | <= 2.5 s on a mid-range Android over 4G |
-| Frame rate | 60 fps (High/Medium), >= 30 fps (Low) on the reference low-end device |
-| Draw calls | <= 150 High, <= 60 Low |
-| Triangles | <= 150k High, <= 40k Low |
+| Frame rate | see per-tier budgets below |
+| Draw calls | see per-tier budgets below |
+| Triangles | see per-tier budgets below |
 | JS heap | <= 300 MB |
 | WebSocket payload | <= 2 KB per tick for the demo graph |
 | Main-thread work during scroll | <= 8 ms per frame on Low |
+
+### Per-tier budgets (art pass, owner-approved: High pushed toward photoreal, Medium/Low stay simple)
+
+| | Cinematic (High) | Balanced (Medium) | Simple (Low) |
+| --- | --- | --- | --- |
+| Frame rate | 60 fps on a discrete GPU or Apple M-series; >= 30 fps on an Intel Iris Xe-class laptop; otherwise the governor must step down | 60 fps | >= 30 fps on the reference low-end device |
+| Draw calls (all passes: main + reflection + shadow + post) | <= 200 | <= 60 | <= 40 |
+| Triangles (all passes) | <= 400k | <= 20k | <= 10k |
+| GPU memory (render targets + textures, estimate) | <= 64 MB | <= 4 MB | <= 2 MB |
+| Download beyond the initial bundle | <= 15 MB, lazy, cached (currently 20.1 KB of JS: everything is procedural) | none - never fetches Cinematic code | none |
+
+Measured values per round live in `docs/HANDOVER.md`. `npm run check:bundle` enforces the
+initial (350 KB) and lazy-chunk budgets in CI; `node frontend/scripts/perf.mjs` prints fps, CPU ms,
+draw calls, triangles and GPU memory per tier (dev server, `?debug=1`).
 
 Reference low-end device: pick and record it in M1 (e.g. a ~2019 Android with a Mali/Adreno
 mid-tier GPU) and test on real hardware, not only throttled desktop Chrome.

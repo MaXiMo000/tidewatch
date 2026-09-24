@@ -56,6 +56,7 @@ export class FpsGovernor {
   private goodSince: number | null = null;
   private readonly blockedUntil: Record<Tier, number> = { high: 0, medium: 0, low: 0 };
   private readonly backoff: Record<Tier, number>;
+  private ceiling: Tier = "high";
 
   constructor(
     initial: Tier,
@@ -66,6 +67,11 @@ export class FpsGovernor {
     this.means = new Float64Array(opts.buckets);
     this.settleUntil = now + opts.settleMs;
     this.backoff = { high: opts.retryBackoffMs, medium: opts.retryBackoffMs, low: opts.retryBackoffMs };
+  }
+
+  /** Highest tier auto mode may step UP to (phones: medium). Never forces a step down. */
+  setCeiling(tier: Tier): void {
+    this.ceiling = tier;
   }
 
   get current(): Tier {
@@ -129,7 +135,7 @@ export class FpsGovernor {
     }
     const window = this.opts.bucketMs * this.opts.buckets;
     this.goodSince ??= now - window;
-    const higher = higherTier(this.tier);
+    const higher = this.tier === this.ceiling ? null : higherTier(this.tier);
     if (higher && now - this.goodSince >= this.opts.upHoldMs && now >= this.blockedUntil[higher]) {
       return this.change(higher, now);
     }

@@ -1,26 +1,39 @@
 /**
- * Bootstrap + the one render loop (docs/ARCHITECTURE.md s.4 "Render loop rules"):
- * socket -> store; each frame reads the store once, eases the world, renders; tier changes come
- * from the FPS governor or the user and are applied in one place (applyTier).
+ * Bootstrap + the one render loop (docs/ARCHITECTURE.md s.4):
+ * socket -> store -> WorldModel (eased, shared) -> the active RenderPath draws it.
+ *
+ * First paint is always the stylised path (main bundle). If the tier is Cinematic, its chunk is
+ * imported lazily AFTER that first frame, behind a progress bar, and swapped in when ready. Leaving
+ * Cinematic swaps back and frees its GPU memory. Balanced/Simple never download the chunk.
  */
 import * as THREE from "three";
 import "./style.css";
+import { prettyName } from "./hud/copy";
 import { Hud, type HudState, type TierChoice } from "./hud/hud";
+import { Inspector } from "./hud/inspector";
 import { MetricsClient } from "./net/client";
+import { detectStartTier } from "./quality/detect";
 import { initialTier, readDeviceInfo } from "./quality/gpu";
 import { FpsGovernor } from "./quality/governor";
 import { isTier, TIER_SETTINGS, type Tier } from "./quality/tiers";
+import type { RenderPath } from "./render/path";
+import { StylisedPath } from "./render/stylised";
 import { CameraRig } from "./scene/camera";
-import { PALETTE, SUN_DIRECTION } from "./scene/palette";
-import { Sky } from "./scene/sky";
-import { Water } from "./scene/water";
-import { World } from "./scene/world";
+import { WorldModel } from "./scene/model";
 import { store } from "./state/store";
 
 const canvasEl = document.querySelector<HTMLCanvasElement>("#scene");
-if (!canvasEl) throw new Error("required DOM node #scene is missing");
-// Re-bind as a non-null const: TS does not carry the narrowing above into closures.
+const labelLayer = document.querySelector<HTMLElement>("#island-labels");
+const cardEl = document.querySelector<HTMLElement>("#island-card");
+const loadingEl = document.querySelector<HTMLElement>("#hud-loading");
+const loadingBar = document.querySelector<HTMLProgressElement>("#hud-loading-bar");
+const loadingLabel = document.querySelector<HTMLElement>("#hud-loading-label");
+if (!canvasEl || !loadingEl || !loadingBar || !loadingLabel || !labelLayer || !cardEl) {
+  throw new Error("required DOM nodes are missing");
+}
+// Re-bind as non-null consts: TS does not carry the narrowing above into closures.
 const canvas: HTMLCanvasElement = canvasEl;
+const loading = { root: loadingEl, bar: loadingBar, label: loadingLabel };
 
 const PREF_KEY = "tidewatch.quality"; // a display preference, never a credential
 const IDLE_AFTER_MS = 20_000;
@@ -66,58 +79,109 @@ const hud = new Hud(
   () => choice,
 );
 
-/**
- * Probe the GPU on a throwaway canvas: context attributes such as antialias are fixed at creation,
- * and asking the real canvas again would just return its first context.
- */
-function detectTier(): Tier | null {
-  const probe = document.createElement("canvas");
-  const gl = probe.getContext("webgl2") ?? probe.getContext("webgl");
-  if (!gl) return null;
-  const tierGuess = initialTier(readDeviceInfo(gl));
-  gl.getExtension("WEBGL_lose_context")?.loseContext();
-  return tierGuess;
-}
+const inspector = new Inspector(labelLayer, cardEl, (state) => hud.showToast(prettyName(state.id)));
 
-const probed = detectTier();
-if (!probed) {
+window.addEventListener("keydown", (e) => {
+  if (e.altKey || e.ctrlKey || e.metaKey) return;
+  const typing = e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement;
+  if (typing || hud.menuOpen) return;
+  if (e.key === "q" || e.key === "Q") hud.cycleQuality();
+  else if (e.key === "l" || e.key === "L") inspector.labelsVisible = !inspector.labelsVisible;
+  else if (e.key === "Escape") inspector.clear();
+});
+
+let renderer: THREE.WebGLRenderer;
+try {
+  renderer = new THREE.WebGLRenderer({
+    canvas,
+    antialias: false,
+    powerPreference: "high-performance",
+  });
+} catch {
   hud.showFatal("WebGL unavailable - the 2D view arrives in M4");
   client.start();
   throw new Error("WebGL unavailable");
 }
-const detected: Tier = probed;
-const startTier = choice === "auto" ? detected : choice;
-const renderer = new THREE.WebGLRenderer({
-  canvas,
-  antialias: TIER_SETTINGS[startTier].antialias,
-  powerPreference: "default",
-});
+// Counted once per frame by the loop: the reflection pass renders inside the main render.
+renderer.info.autoReset = false;
 
-const scene = new THREE.Scene();
-scene.fog = new THREE.FogExp2(PALETTE.fog, 0.0095);
-scene.add(new THREE.HemisphereLight(0xb7a3e6, 0x0b3a44, 1.1));
-const sun = new THREE.DirectionalLight(PALETTE.sun, 1.6);
-// Light from the sun's side of the sky, but higher than the visible sun so islands read clearly.
-sun.position.set(SUN_DIRECTION.x * 60, 30, SUN_DIRECTION.z * 60);
-scene.add(sun);
+/** Synchronous guess for the first frame; detect-gpu refines it asynchronously. */
+let detected: Tier = initialTier(readDeviceInfo(renderer.getContext()));
+const touchPrimary = window.matchMedia("(pointer: coarse) and (hover: none)").matches;
+/** Phones and tablets are never promoted to Cinematic automatically (the user may still pick it). */
+const autoCeiling: Tier = touchPrimary ? "medium" : "high";
+if (detected === "high" && autoCeiling !== "high") detected = autoCeiling;
 
-const sky = new Sky(TIER_SETTINGS[startTier].skyBands);
-const water = new Water(TIER_SETTINGS[startTier].waterDetail);
-const world = new World();
-scene.add(sky.mesh, water.mesh, world.root);
+const model = new WorldModel();
 const rig = new CameraRig();
+const governor = new FpsGovernor(detected, performance.now());
+governor.setCeiling(autoCeiling);
 
-const governor = new FpsGovernor(startTier, performance.now());
-let tier: Tier = startTier;
+let tier: Tier = choice === "auto" ? detected : choice;
+const stylised = new StylisedPath(renderer, model, tier === "high" ? "medium" : tier);
+let path: RenderPath = stylised;
+let cinematic: RenderPath | null = null;
+let cinematicLoading: Promise<void> | null = null;
+
+function setLoading(fraction: number | null, label = ""): void {
+  loading.root.hidden = fraction === null;
+  if (fraction !== null) {
+    loading.bar.value = Math.round(fraction * 100);
+    loading.label.textContent = label;
+  }
+}
+
+function usePath(next: RenderPath): void {
+  path = next;
+  rig.setShot(next.shot);
+  next.setReducedMotion(reducedMotionQuery.matches);
+  document.documentElement.dataset["path"] = next.name;
+  resize();
+}
+
+function ensureCinematic(): void {
+  if (cinematic) {
+    if (tier === "high") usePath(cinematic);
+    return;
+  }
+  if (cinematicLoading) return;
+  setLoading(0.05, "Loading cinematic view");
+  cinematicLoading = import("./cinematic/cinematic")
+    .then((m) =>
+      m.createCinematicPath(renderer, model, rig.camera, (f, label) => setLoading(f, label)),
+    )
+    .then((p) => {
+      cinematic = p;
+      setLoading(null);
+      // The tier may have changed while loading; only switch if still Cinematic.
+      if (tier === "high") usePath(p);
+    })
+    .catch(() => {
+      setLoading(null);
+      hud.showNotice("Cinematic view failed to load - staying on Balanced");
+      if (tier === "high") applyTier("medium");
+    })
+    .finally(() => {
+      cinematicLoading = null;
+    });
+}
 
 function applyTier(next: Tier): void {
   tier = next;
   const t = TIER_SETTINGS[next];
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, t.pixelRatioCap));
-  water.setDetail(t.waterDetail);
-  sky.setBands(t.skyBands);
-  world.setGlow(t.glowSprites);
   document.documentElement.dataset["tier"] = next;
+  if (next === "high") {
+    stylised.applyTier("medium"); // what shows while the chunk loads
+    ensureCinematic();
+  } else {
+    stylised.applyTier(next);
+    if (path !== stylised) usePath(stylised);
+    if (cinematic) {
+      cinematic.dispose(); // free its render targets; the module stays cached for a quick return
+      cinematic = null;
+    }
+  }
   resize();
 }
 
@@ -139,13 +203,14 @@ function resize(): void {
   const h = canvas.clientHeight;
   renderer.setSize(w, h, false);
   rig.resize(w, h);
-  rig.frame(world.bounds.cx, world.bounds.cz, world.bounds.radius);
+  path.resize(w, h);
 }
 
 const reducedMotionQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
 function applyReducedMotion(): void {
-  world.setReducedMotion(reducedMotionQuery.matches);
   rig.setReducedMotion(reducedMotionQuery.matches);
+  stylised.setReducedMotion(reducedMotionQuery.matches);
+  cinematic?.setReducedMotion(reducedMotionQuery.matches);
 }
 reducedMotionQuery.addEventListener("change", applyReducedMotion);
 applyReducedMotion();
@@ -154,9 +219,24 @@ let lastInput = performance.now();
 const markInput = (): void => {
   lastInput = performance.now();
 };
-for (const type of ["pointermove", "pointerdown", "keydown", "wheel", "touchstart"] as const) {
+for (const type of ["pointerdown", "keydown", "wheel", "touchstart"] as const) {
   window.addEventListener(type, markInput, { passive: true });
 }
+window.addEventListener(
+  "pointermove",
+  (e) => {
+    markInput();
+    rig.setPointer((e.clientX / window.innerWidth) * 2 - 1, 1 - (e.clientY / window.innerHeight) * 2);
+    // Only pick islands when the pointer is over the scene, not over HUD controls.
+    inspector.setPointer(e.target === canvas ? e.clientX : null, e.clientY);
+  },
+  { passive: true },
+);
+canvas.addEventListener("pointerdown", (e) => {
+  inspector.setPointer(e.clientX, e.clientY);
+});
+canvas.addEventListener("click", () => inspector.click());
+canvas.addEventListener("pointerleave", () => inspector.setPointer(null));
 window.addEventListener("resize", () => {
   markInput();
   resize();
@@ -171,21 +251,35 @@ canvas.addEventListener("webglcontextrestored", () => {
   contextLost = false;
 });
 
-applyTier(startTier);
+usePath(stylised);
 applyChoice(performance.now());
 client.start();
 
+// detect-gpu (self-hosted benchmarks) refines the start tier; only matters in auto mode.
+void detectStartTier(renderer.getContext()).then(({ tier: guess, source }) => {
+  document.documentElement.dataset["detect"] = source;
+  detected = guess === "high" && autoCeiling !== "high" ? autoCeiling : guess;
+  if (choice === "auto" && detected !== tier) applyChoice(performance.now());
+});
+
 type Overlay = import("./debug/overlay").DebugOverlay;
 let overlay: Overlay | null = null;
-if (import.meta.env.DEV && new URLSearchParams(location.search).has("debug")) {
-  void import("./debug/overlay").then((m) => {
-    overlay = new m.DebugOverlay();
-  });
+if (import.meta.env.DEV) {
+  const q = new URLSearchParams(location.search);
+  if (q.has("debug")) {
+    void import("./debug/overlay").then((m) => {
+      overlay = new m.DebugOverlay();
+    });
+  }
+  if (q.has("tune")) void import("./dev/tuning").then((m) => m.mountTuningPanel());
 }
 
 let lastRaf = performance.now();
 let lastRender = 0;
-let lastTopologyRadius = -1;
+let lastTopology = -1;
+let framesOnPath = 0;
+let lastPathName = "";
+let lastReady = "";
 const start = performance.now();
 const hudState: HudState = {
   conn: store.conn,
@@ -199,7 +293,7 @@ const hudState: HudState = {
 function updateHud(): void {
   hudState.conn = store.conn;
   hudState.seq = store.latest?.seq ?? null;
-  hudState.counts = world.islandCount > 0 ? world.counts : null;
+  hudState.counts = model.islands.size > 0 ? model.counts : null;
   hudState.heading = rig.heading;
   hudState.tier = tier;
   hudState.choice = choice;
@@ -223,20 +317,34 @@ function frame(now: number): void {
   lastRender = now;
   const t0 = performance.now();
 
-  world.sync(store.latest);
-  if (world.bounds.radius !== lastTopologyRadius) {
-    lastTopologyRadius = world.bounds.radius;
-    rig.frame(world.bounds.cx, world.bounds.cz, world.bounds.radius);
+  model.sync(store.latest);
+  if (model.topologyVersion !== lastTopology) {
+    lastTopology = model.topologyVersion;
+    rig.frame(
+      model.bounds.cx,
+      model.bounds.cz,
+      model.bounds.radius,
+      [...model.islands.values()].map((i) => ({ x: i.place.x, z: i.place.z })),
+    );
   }
-  const seconds = (now - start) / 1000;
-  const waterSeconds = reducedMotionQuery.matches ? seconds * 0.25 : seconds;
-  world.tick(dt, seconds);
+  model.tick(dt);
   rig.tick(dt);
-  water.tick(waterSeconds, rig.camera);
-  sky.tick(seconds, rig.camera);
-  renderer.render(scene, rig.camera);
+  renderer.info.reset();
+  path.frame(dt, (now - start) / 1000, rig.camera, rig.base);
 
+  // Screenshot/E2E readiness: the intended path has drawn a few frames with live data.
+  if (path.name !== lastPathName) {
+    lastPathName = path.name;
+    framesOnPath = 0;
+  }
+  if (model.islands.size > 0) framesOnPath += 1;
+  const wanted = tier === "high" ? "cinematic" : "stylised";
+  const ready = path.name === wanted && framesOnPath > 8 ? "1" : "0";
+  if (ready !== lastReady) document.documentElement.dataset["ready"] = lastReady = ready;
+
+  const inspection = inspector.update(model, rig.camera, canvas.clientWidth, canvas.clientHeight);
+  hud.setPlace(inspection.state);
   updateHud();
-  overlay?.frame(now, performance.now() - t0, renderer, tier);
+  overlay?.frame(now, performance.now() - t0, renderer, tier, path.info().gpuBytes);
 }
 requestAnimationFrame(frame);

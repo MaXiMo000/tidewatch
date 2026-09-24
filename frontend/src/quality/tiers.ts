@@ -7,6 +7,13 @@ export type Tier = "high" | "medium" | "low";
 
 export const TIERS: readonly Tier[] = ["high", "medium", "low"];
 
+/** User-facing names: same world, three render paths (docs/ARCHITECTURE.md s.5). */
+export const TIER_LABEL: Readonly<Record<Tier, string>> = {
+  high: "Cinematic",
+  medium: "Balanced",
+  low: "Simple",
+};
+
 export interface TierSettings {
   /** Upper bound for renderer.setPixelRatio - the single biggest win on weak GPUs. */
   readonly pixelRatioCap: number;
@@ -18,6 +25,8 @@ export interface TierSettings {
   readonly skyBands: number;
   /** Additive glow sprites over islands. */
   readonly glowSprites: boolean;
+  /** Silhouette trees around the archipelago (stylised path; Cinematic has its own foliage). */
+  readonly silhouettes: number;
   /** Request particles (M3). Kept here so the whole budget lives in one table. */
   readonly particles: number;
   /** Antialiasing is requested at context creation; changing it needs a new context. */
@@ -31,6 +40,7 @@ export const TIER_SETTINGS: Readonly<Record<Tier, TierSettings>> = {
     waterDetail: true,
     skyBands: 3,
     glowSprites: true,
+    silhouettes: 110,
     particles: 2000,
     antialias: true,
   },
@@ -40,6 +50,7 @@ export const TIER_SETTINGS: Readonly<Record<Tier, TierSettings>> = {
     waterDetail: true,
     skyBands: 1,
     glowSprites: true,
+    silhouettes: 90,
     particles: 800,
     antialias: false,
   },
@@ -49,6 +60,7 @@ export const TIER_SETTINGS: Readonly<Record<Tier, TierSettings>> = {
     waterDetail: false,
     skyBands: 1,
     glowSprites: false,
+    silhouettes: 30,
     particles: 250,
     antialias: false,
   },

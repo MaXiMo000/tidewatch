@@ -5,10 +5,10 @@ Services are islands, requests are ships of light, latency is fog and storms, er
 FastAPI streams the metrics over a hardened WebSocket; Three.js renders them; it is designed to
 stay smooth on low-end devices.
 
-> Status: **M1 built** (scene foundation + quality tiers). A dusk archipelago driven live by the
-> demo data source, with High/Medium/Low tiers and an FPS governor, verified in a real browser
-> against the production-shaped HTTPS stack in CI. Not yet measured on a real low-end device.
-> Next: M2 (scroll movie). See [`docs/HANDOVER.md`](docs/HANDOVER.md) for exactly
+> Status: **M1 + art pass** (in review). A moonlit cypress-swamp archipelago driven live by the
+> demo data: every service an islet with its own structure, requests as lantern-lit boats, latency
+> as mist, incidents as storms. Three tiers - Cinematic (near-photoreal, lazy-loaded), Balanced,
+> Simple - chosen by detect-gpu and an FPS governor. Next: M2 (scroll movie). See [`docs/HANDOVER.md`](docs/HANDOVER.md) for exactly
 > what is and is not verified.
 
 ## Why it exists

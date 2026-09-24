@@ -77,7 +77,12 @@ backend serves both during a deprecation window.
 | `scene/layout.ts` | Deterministic island positions from topology (longest-path columns), order-independent |
 | `scene/world.ts` | Islands (size = traffic, crown/glow = status), lanterns, channels; `sync()` per snapshot, `tick()` per frame |
 | `scene/water.ts`, `sky.ts`, `glow.ts`, `palette.ts`, `camera.ts` | Tiered water shader, camera-centred dusk dome, shared glow texture, colours, idle orbit |
-| `hud/hud.ts` | Status, text health summary, compass, quality control (textContent only) |
+| `hud/hud.ts` | Title, live status + compass strip, health summary, quality menu (keyboard), place panel, hints, legend, caption, toasts (textContent only) |
+| `hud/inspector.ts` | Island labels (focusable buttons, collision layout), screen-space picking (same on every tier), stats card |
+| `hud/copy.ts` | HUD wording: status words, per-kind subtitles, number formats |
+| `scene/islands.ts` | Islets + kind-specific structures, per-island health animation (amber pulse, red flicker), one instanced glow batch; "pbr" (Cinematic) or "flat" (Balanced/Simple, one merged mesh per islet) |
+| `scene/boats.ts` | Requests as GPU-animated boats on every channel (count follows rps); Cinematic adds wakes |
+| `scene/silhouette.ts`, `glows.ts`, `random.ts` | Kind -> structure + label heights; instanced billboards; seeded PRNG |
 | `debug/overlay.ts` | `?debug=1` fps / CPU ms / draw calls / triangles - dev builds only |
 
 Planned (M2+):
@@ -96,17 +101,35 @@ src/
 - No allocations per frame in the hot path (reuse vectors/colours); `InstancedMesh` for anything repeated.
 - All DOM text set with `textContent`. No HTML built from data.
 
-## 5. Quality tiers
+## 5. Quality tiers: same world, three render paths
 
-| | High | Medium | Low |
+| | Cinematic (High) | Balanced (Medium) | Simple (Low) |
 | --- | --- | --- | --- |
-| Pixel ratio cap | 2 | 1.5 | 1 |
-| Water | shader + optional planar reflection | shader, fake reflection | flat gradient + Fresnel |
-| Post-processing | CSS vignette + baked glow sprites (bloom/grain: evaluate against the budget in M3) | CSS vignette + glow sprites | CSS vignette, no glow |
-| Particles | 2000 | 800 | 250 |
-| Fog/clouds | layered | single layer | single layer |
-| Shadows | off (baked glow instead) | off | off |
-| Target fps | 60 | 60 | 30 |
+| Code | `src/cinematic/` - separate lazy chunk, imported only on High after first paint | `render/stylised.ts` (main bundle) | same as Balanced |
+| Sky | HDR dusk dome, fbm clouds lit from below, small moon/sun; PMREM environment | gradient shader + 1 cloud band | gradient shader |
+| Lighting | ACES tone mapping (post), 1 directional light + 1 soft PCF shadow cascade, hemisphere + PMREM | hemisphere + directional, no shadows | same |
+| Water | planar reflection (Reflector, half-float, `reflectionScale`), 3 normal layers, Fresnel, glint column | shader with fake (sky) reflection, animated normals | flat gradient + Fresnel |
+| Atmosphere | half-res raymarched height fog (noise, HG scatter), colour/density follow p95 | FogExp2 | FogExp2 |
+| World | mossy islets with kind-specific structures (lighthouse, tower, stilt hall, beacon, vault, jetty, workshop), instanced cypress + moss + knees, lily pads, reeds | low-poly islands, instanced silhouette treeline (90) | same, 30 trees, no glow sprites |
+| Post | bloom (lanterns/glint only), half-res height fog, depth AO + light shafts, subtle DOF, ACES, teal/pink grade, light CA, vignette, grain, lightning flash | CSS vignette | CSS vignette |
+| Requests / health | boats + wakes, shore foam, amber pulse / red flicker, storm clouds, rain, lightning, fireflies | boats, amber pulse / red flicker | boats, pulse/flicker, no glow |
+| Pixel ratio cap / target fps | 2 / 60 | 1.5 / 60 | 1 / 30 |
+
+Shared by all paths: `scene/model.ts` (layout, eased values, counts, latency, storm), the camera
+rig and the HUD. The Cinematic camera does a slow pendulum drift around a composed base azimuth
+(chosen to separate the islands; the sun is placed relative to it so the glint faces the viewer);
+stylised paths orbit. Under prefers-reduced-motion the camera holds still.
+
+### Cinematic asset pipeline
+
+Everything is generated on the device at load time, behind the progress bar: the water normal map
+(periodic value noise), leaf-cluster and Spanish-moss cards (seeded canvas drawings), islet rock
+(displaced icosphere with vertex colours), structures (primitives merged per material), cypress
+trunks (flared lathe) and all placement (seeded PRNG). There are **no downloaded models or
+textures**, so there is no glTF/KTX2 parsing of untrusted files, no Draco/Basis/Meshopt decoder,
+and **no CSP change** (`'wasm-unsafe-eval'` is not needed). If real assets are ever added they must
+follow the asset rules in `docs/PLAN.md` (CC0/permissive, committed with SOURCES.md + licences,
+self-hosted decoders, size limits, no external references).
 
 `quality/gpu.ts` guesses the starting tier; `quality/governor.ts` samples the rAF interval and steps
 **down** after ~2 s below ~48 fps, and back **up** only after 15 s at ~55+ fps, with a doubling
@@ -114,9 +137,10 @@ back-off on a tier it fell from. Users override with the HUD quality button (aut
 kept in `localStorage` as a display preference) or `?quality=`. Low and idle (20 s without input)
 render at 30 fps. A 2D fallback dashboard (M4) covers no-WebGL and below-minimum devices.
 
-Not `detect-gpu` (the original plan): it fetches benchmark JSON from a CDN at runtime, a third-party
-origin forbidden by CLAUDE.md rule 5, unless ~1 MB of data is self-hosted, and it is one more
-dependency. A coarse guess is enough because the governor corrects it within seconds.
+`quality/detect.ts` then refines the start tier with **detect-gpu** (owner decision), its benchmark
+JSON served from our own origin (`/benchmarks/*.json`, emitted by a Vite plugin from the npm
+package) and loaded through `loadBenchmarks` with a name allowlist and size cap - the library's
+unpkg.com default is never used. Phones and tablets are never auto-promoted to Cinematic.
 
 ## 6. Live data adapters (M5) - design
 
