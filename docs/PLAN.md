@@ -159,7 +159,7 @@ foundations come before spectacle.
   Lighthouse as a dependency.
 - [x] SBOM + build provenance: `.github/workflows/release.yml` on `v*.*.*` tags.
 - [x] README with the film GIF and screenshots; CHANGELOG.
-- [ ] `v0.1.0` release - **owner**: merge #20-#23, then tag (see HANDOVER).
+- [ ] `v0.1.0` release - **owner**: #20-#25 merged; push the tag from a local clone (see HANDOVER s.0).
 - **Accept:** SECURITY.md s.7 is ticked with evidence except three items that need the real
   deployment or the release tag (headers on the real domain, securityheaders.com grade, the first
   published SBOM) - each says what remains and who does it.

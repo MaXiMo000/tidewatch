@@ -3,12 +3,28 @@
 Audience: Claude Code (or any engineer) picking this project up cold. Read this file, then
 `CLAUDE.md`, then the milestone you are working on in `docs/PLAN.md`.
 
-## 0. Current state: v0.1.0 released (M0-M6 + island batching #24); owner: Render deploy
+## 0. Current state: all merged (M0-M6, island batching #24, release prep #25); owner: tag + Render
 
 **M5 live data is merged** (PR #16): metrics add-ons in AniNest/Quiz-App/LabLedger (`addons/`),
 `LiveSource`, offline islands, Render deployment files, owner risk acceptance in SECURITY.md.
-The owner's remaining part is the Render steps in `docs/M5-LIVE-PLAN.md` s.5 (tokens, env vars,
-Blueprint). LabLedger and Quiz-App show **offline** until they are redeployed next month.
+LabLedger and Quiz-App show **offline** until they are redeployed next month.
+
+**Owner, remaining (2026-09-24):**
+1. **Tag v0.1.0** from a local clone: `git fetch origin && git tag -a v0.1.0 origin/main -m "Tidewatch
+   v0.1.0" && git push origin v0.1.0` (the cloud session's git proxy refuses tag pushes, HTTP 403).
+   Push the tag from the CLI, not "Draft a new release": the workflow creates the release itself.
+2. **Render: blocked by the free-instance limit.** The Blueprint sync (`render.yaml`) failed with no
+   log; the reason was "You have reached your free instance usage limit for this month" (750 free
+   hours per workspace, used by the other free services). Options: wait for the monthly reset
+   (~Oct 1), or pick the Starter plan. Creating the web service by hand gives real logs: see
+   `docs/M5-LIVE-PLAN.md` s.5. The Render image was rebuilt and run locally with live-mode env
+   (healthz 200, `/api/v1/info` lists the 3 sources); a missing/invalid `TIDEWATCH_LIVE_SOURCES` or
+   `TIDEWATCH_SOURCE_TOKENS` makes the container exit with a clear `Value error` at startup.
+3. **Tokens:** generated for the owner (kept outside the repo). Set `TIDEWATCH_METRICS_TOKEN` on
+   `aninest-backend` now, on LabLedger / Quiz-App when they return; the same values go into
+   Tidewatch's `TIDEWATCH_SOURCE_TOKENS`. Confirm Quiz-App's backend hostname for its source URL.
+4. Until Render is up, run live mode locally: `.env` from `.env.example` with the live variables,
+   then `docker compose up --build` (https://localhost).
 
 **M2 scroll film** (merged, #20; design in ARCHITECTURE s.4 "The scroll film"):
 - `scene/story.ts` (pure, 15 unit tests: chapters, route planning, request path, continuity of the
@@ -66,9 +82,8 @@ budget at 41 islands: triangles on every tier (Simple 30.7k vs 10k) and Cinemati
 islet detail level would be the next step if larger topologies appear. Before/after screenshots on
 Balanced and Cinematic are visually equivalent. 5 new unit tests; all 22 E2E pass (vite preview).
 
-**Merged:** #20 -> #21 -> #22 -> #23 (main `3adef88`). **Owner, to finish v0.1.0:** do the Render steps in `docs/M5-LIVE-PLAN.md` s.5, then tag: `git tag v0.1.0 && git push
-origin v0.1.0` (the release workflow builds, generates the SBOM, attests and publishes). After the
-deploy, check the real domain's headers (`curl -I`) and securityheaders.com (SECURITY.md s.7).
+**Merged:** #20 -> #21 -> #22 -> #23 -> #24 -> #25. Tag and Render: see "Owner, remaining" above.
+After the deploy, check the real domain's headers (`curl -I`) and securityheaders.com (SECURITY.md s.7).
 
 Not verified: iOS Safari, Android Chrome, desktop Firefox; real low-end hardware; fps on real GPUs;
 a real screen reader (NVDA/VoiceOver); sinking boats caught mid-sink on camera; the release workflow
@@ -94,7 +109,7 @@ stash, reset or discard it**; don't curl the apps' live URLs without asking.
   suite ran against `mongo:7` and Quiz-App's `mongodb-memory-server` used the image's `mongod`
   (`MONGOMS_SYSTEM_BINARY`) because the sandbox blocks fastdl.mongodb.org.
 
-## 1. Where things stand (M0, M1, art pass, M5 merged; M2-M6 in review; then v0.1.0)
+## 1. Where things stand (M0-M6 merged; history of earlier rounds below)
 
 ### Built
 - **Backend** (`backend/app/`): config validation, strict schemas, security primitives,
