@@ -31,6 +31,8 @@ jobs:
       - run: mypy app
       - run: bandit -q -r app -c pyproject.toml
       - run: pip-audit
+      # Audit the hash-pinned lock that actually ships in the Docker image, not just the dev venv.
+      - run: pip-audit --disable-pip --require-hashes -r requirements.lock
       - run: pytest
 
   frontend:
@@ -53,6 +55,50 @@ jobs:
       - run: npm test
       - run: npm run build
       - run: npm audit --omit=dev --audit-level=high
+
+  # Builds the image from the hash-pinned lock and smoke-tests the production-shaped stack over
+  # HTTPS (Caddy local CA): headers, WebSocket auth, backend unreachable except through Caddy.
+  compose:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.12"
+      - name: Build frontend
+        working-directory: frontend
+        run: npm ci --ignore-scripts && npm run build
+      - name: Start stack
+        working-directory: deploy
+        env:
+          TIDEWATCH_DOMAIN: localhost
+        run: docker compose up --build --detach --wait --wait-timeout 120
+      - name: Smoke test
+        env:
+          TIDEWATCH_DOMAIN: localhost
+        run: |
+          pip install --require-hashes --no-deps -r backend/requirements.lock
+          docker compose -f deploy/docker-compose.yml cp caddy:/data/caddy/pki/authorities/local/root.crt "$RUNNER_TEMP/ca.crt"
+          python scripts/smoke_compose.py --ca "$RUNNER_TEMP/ca.crt"
+      - name: Logs on failure
+        if: failure()
+        working-directory: deploy
+        env:
+          TIDEWATCH_DOMAIN: localhost
+        run: docker compose logs --no-color
+      - name: Stop stack
+        if: always()
+        working-directory: deploy
+        env:
+          TIDEWATCH_DOMAIN: localhost
+        run: docker compose down --volumes
 
   gitleaks:
     runs-on: ubuntu-latest
