@@ -21,6 +21,7 @@
   --ok: #3fd0a5;
   --degraded: #f2b134;
   --failing: #ff5a67;
+  --offline: #59606b;
   --lantern: #ffb45e;
   --serif: "Cormorant Garamond", ui-serif, Georgia, serif;
   --mono: "IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace;
@@ -419,6 +420,10 @@ kbd {
   background: conic-gradient(var(--ok) 0 33%, var(--degraded) 0 66%, var(--failing) 0);
 }
 
+.swatch-offline {
+  background: var(--offline);
+}
+
 .swatch-fog {
   background: #5f8f86;
 }
@@ -519,6 +524,11 @@ kbd {
   color: var(--failing);
 }
 
+.status-dot[data-status="offline"] {
+  background: var(--offline);
+  color: transparent;
+}
+
 #island-card {
   position: fixed;
   left: 0;
@@ -582,6 +592,10 @@ kbd {
 
 .card-status[data-status="failing"] {
   color: var(--failing);
+}
+
+.card-status[data-status="offline"] {
+  color: var(--fg-dim);
 }
 
 /* ---------- transient ---------- */

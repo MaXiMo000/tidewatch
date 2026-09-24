@@ -48,7 +48,7 @@ export interface EdgeState {
 export class WorldModel {
   readonly islands = new Map<string, IslandState>();
   edges: EdgeState[] = [];
-  readonly counts: Record<Status, number> = { ok: 0, degraded: 0, failing: 0 };
+  readonly counts: Record<Status, number> = { ok: 0, degraded: 0, failing: 0, offline: 0 };
   readonly bounds = { cx: 0, cz: 0, radius: 10 };
   /** Eased mean latency factor (0..1) across services. */
   latency = 0;
@@ -71,7 +71,7 @@ export class WorldModel {
       this.rebuild(snap);
     }
     let latencySum = 0;
-    this.counts.ok = this.counts.degraded = this.counts.failing = 0;
+    this.counts.ok = this.counts.degraded = this.counts.failing = this.counts.offline = 0;
     for (const svc of snap.services) {
       const isl = this.islands.get(svc.id);
       if (!isl) continue;
@@ -81,9 +81,10 @@ export class WorldModel {
       isl.rps = svc.rps;
       isl.errorRate = svc.error_rate;
       this.counts[svc.status] += 1;
-      latencySum += latencyFactor(svc.p95_ms);
+      // An offline app reports nothing: it must not thin the mist or dilute the storm.
+      if (svc.status !== "offline") latencySum += latencyFactor(svc.p95_ms);
     }
-    const n = Math.max(1, this.islands.size);
+    const n = Math.max(1, this.islands.size - this.counts.offline);
     this.targetLatency = latencySum / n;
     this.targetStorm = this.counts.failing / n;
     const byKey = new Map(snap.edges.map((e) => [`${e.src}>${e.dst}`, e.rps]));
@@ -98,6 +99,7 @@ export class WorldModel {
       isl.weight.ok += ((isl.status === "ok" ? 1 : 0) - isl.weight.ok) * k;
       isl.weight.degraded += ((isl.status === "degraded" ? 1 : 0) - isl.weight.degraded) * k;
       isl.weight.failing += ((isl.status === "failing" ? 1 : 0) - isl.weight.failing) * k;
+      isl.weight.offline += ((isl.status === "offline" ? 1 : 0) - isl.weight.offline) * k;
     }
     for (const e of this.edges) e.rps += (e.targetRps - e.rps) * k;
     this.latency += (this.targetLatency - this.latency) * k;
@@ -124,6 +126,7 @@ export class WorldModel {
           ok: svc.status === "ok" ? 1 : 0,
           degraded: svc.status === "degraded" ? 1 : 0,
           failing: svc.status === "failing" ? 1 : 0,
+          offline: svc.status === "offline" ? 1 : 0,
         },
         scale,
         targetScale: scale,

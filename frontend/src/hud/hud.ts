@@ -7,6 +7,7 @@
  * CSSOM transform for the compass strip.
  */
 import type { ConnState } from "../net/client";
+import type { Info } from "../net/protocol";
 import { TIER_LABEL, type Tier } from "../quality/tiers";
 import type { IslandState } from "../scene/model";
 import { formatMs, formatPct, formatRps, prettyName, STATUS_WORD, subtitleFor } from "./copy";
@@ -25,7 +26,7 @@ function el<T extends HTMLElement>(selector: string): T {
 export interface HudState {
   conn: ConnState;
   seq: number | null;
-  counts: { ok: number; degraded: number; failing: number } | null;
+  counts: { ok: number; degraded: number; failing: number; offline: number } | null;
   heading: number;
   tier: Tier;
   choice: TierChoice;
@@ -48,6 +49,8 @@ export class Hud {
   };
   private readonly legendButton = el<HTMLButtonElement>("#hud-legend-toggle");
   private readonly legend = el<HTMLElement>("#hud-legend");
+  private readonly caption = el<HTMLElement>("#hud-caption");
+  private readonly offlineRow = el<HTMLElement>("#hud-legend-offline");
   private noticeTimer: number | null = null;
   private toastTimer: number | null = null;
   private placeKey = "";
@@ -169,7 +172,8 @@ export class Hud {
     }
 
     const summary = s.counts
-      ? `${s.counts.ok} ok · ${s.counts.degraded} degraded · ${s.counts.failing} failing`
+      ? `${s.counts.ok} ok · ${s.counts.degraded} degraded · ${s.counts.failing} failing` +
+        (s.counts.offline > 0 ? ` · ${s.counts.offline} offline` : "")
       : "";
     if (summary !== this.last.summary) {
       this.summary.textContent = summary;
@@ -202,6 +206,14 @@ export class Hud {
       }
       this.last.choice = s.choice;
     }
+  }
+
+  /** What the world shows: the demo (default caption) or the watched apps' live data. */
+  setSource(info: Info): void {
+    if (info.mode !== "live") return;
+    const names = info.sources.map((s) => s.name).join(", ");
+    this.caption.textContent = names ? `Live · ${names}` : "Live";
+    this.offlineRow.hidden = false;
   }
 
   /** Bottom-left panel: the inspected island, or the archipelago overview. */

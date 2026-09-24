@@ -16,7 +16,12 @@ import { isletScale, type Silhouette, silhouetteFor } from "./silhouette";
 import { GlowBatch } from "./glows";
 import { mulberry32 } from "./random";
 
-const STATUS_HEX: Record<Status, number> = { ok: 0x3fd0a5, degraded: 0xf2b134, failing: 0xff4d5e };
+const STATUS_HEX: Record<Status, number> = {
+  ok: 0x3fd0a5,
+  degraded: 0xf2b134,
+  failing: 0xff4d5e,
+  offline: 0x59606b,
+};
 
 /** "pbr": Cinematic (standard materials, shadows). "flat": Balanced/Simple (flat Lambert, cheaper). */
 export type Flavour = "pbr" | "flat";
@@ -61,12 +66,14 @@ function makeMats(flavour: Flavour): Mats {
       ok: emissive(STATUS_HEX.ok, 4),
       degraded: emissive(STATUS_HEX.degraded, 5),
       failing: emissive(STATUS_HEX.failing, 6),
+      offline: emissive(STATUS_HEX.offline, 1),
     },
     lanternGlow: glowMaterial(0xffa25a, 0.5),
     statusGlow: {
       ok: glowMaterial(STATUS_HEX.ok, 0.45),
       degraded: glowMaterial(STATUS_HEX.degraded, 0.55),
       failing: glowMaterial(STATUS_HEX.failing, 0.65),
+      offline: glowMaterial(STATUS_HEX.offline, 0.1),
     },
   };
 }
@@ -411,6 +418,7 @@ const STATUS_COLOURS: Record<Status, THREE.Color> = {
   ok: new THREE.Color(STATUS_HEX.ok),
   degraded: new THREE.Color(STATUS_HEX.degraded),
   failing: new THREE.Color(STATUS_HEX.failing),
+  offline: new THREE.Color(STATUS_HEX.offline),
 };
 const WARM = new THREE.Color(0xffa95c);
 const RED_WINDOW = new THREE.Color(0xff5a48);
@@ -474,26 +482,28 @@ export class Islands {
       v.shore.set(v.root.position.x, v.root.position.z, 1.35 * scale);
       const w = v.state.weight;
       // Signal colour cross-fades between statuses with the eased weights (no popping).
-      const { ok, degraded, failing } = STATUS_COLOURS;
+      const { ok, degraded, failing, offline } = STATUS_COLOURS;
       this.tmp.setRGB(
-        ok.r * w.ok + degraded.r * w.degraded + failing.r * w.failing,
-        ok.g * w.ok + degraded.g * w.degraded + failing.g * w.failing,
-        ok.b * w.ok + degraded.b * w.degraded + failing.b * w.failing,
+        ok.r * w.ok + degraded.r * w.degraded + failing.r * w.failing + offline.r * w.offline,
+        ok.g * w.ok + degraded.g * w.degraded + failing.g * w.failing + offline.g * w.offline,
+        ok.b * w.ok + degraded.b * w.degraded + failing.b * w.failing + offline.b * w.offline,
       );
+      // Offline: the lights go out. A dim grey signal, dark windows, no lantern.
+      const lit = 1 - w.offline;
       const t = seconds + v.phase;
       // Degraded: slow amber breathing (~0.8 Hz). Failing: irregular red flicker, smooth (no strobe).
       const pulse = reducedMotion ? 0.5 : 0.5 + 0.5 * Math.sin(t * 5);
       const flicker = reducedMotion ? 0.6 : smoothNoise(t * 2.2, v.phase * 13);
       const intensity = 3.5 + w.degraded * (1 + 4 * pulse) + w.failing * (2 + 6 * flicker);
       v.signalMat.emissive.copy(this.tmp);
-      v.signalMat.emissiveIntensity = intensity * this.emissiveScale;
+      v.signalMat.emissiveIntensity = (intensity * lit + 0.6 * w.offline) * this.emissiveScale;
       v.glowMat.color.copy(this.tmp);
-      v.glowMat.opacity = 0.35 + w.degraded * 0.35 * pulse + w.failing * 0.5 * flicker;
+      v.glowMat.opacity = (0.35 + w.degraded * 0.35 * pulse + w.failing * 0.5 * flicker) * lit;
       // Windows: warm when healthy; dim and pulse when degraded; reddish, stuttering when failing.
       v.windowMat.emissive.copy(WARM).lerp(RED_WINDOW, w.failing * 0.6);
       v.windowMat.emissiveIntensity =
-        5.5 * this.emissiveScale * (1 - w.degraded * 0.35 * (1 - pulse) - w.failing * (0.55 - 0.45 * flicker));
-      v.lanternMat.opacity = 0.5 * (1 - w.failing * 0.4 * (1 - flicker));
+        5.5 * this.emissiveScale * lit * (1 - w.degraded * 0.35 * (1 - pulse) - w.failing * (0.55 - 0.45 * flicker));
+      v.lanternMat.opacity = 0.5 * lit * (1 - w.failing * 0.4 * (1 - flicker));
     }
     // All glows in one draw call per pass.
     if (!this.glowsEnabled) return;
@@ -540,8 +550,8 @@ export class Islands {
       const own: Mats = {
         ...this.mats,
         window: windowMat,
-        status: { ok: signalMat, degraded: signalMat, failing: signalMat },
-        statusGlow: { ok: glowMat, degraded: glowMat, failing: glowMat },
+        status: { ok: signalMat, degraded: signalMat, failing: signalMat, offline: signalMat },
+        statusGlow: { ok: glowMat, degraded: glowMat, failing: glowMat, offline: glowMat },
         lanternGlow: lanternMat,
       };
       const built = structure(kind, own, state.status, rnd);

@@ -8,10 +8,11 @@
  */
 import * as THREE from "three";
 import "./style.css";
-import { prettyName } from "./hud/copy";
+import { prettyName, setDisplayNames } from "./hud/copy";
 import { Hud, type HudState, type TierChoice } from "./hud/hud";
 import { Inspector } from "./hud/inspector";
 import { MetricsClient } from "./net/client";
+import { InfoSchema } from "./net/protocol";
 import { detectStartTier } from "./quality/detect";
 import { initialTier, readDeviceInfo } from "./quality/gpu";
 import { FpsGovernor } from "./quality/governor";
@@ -253,7 +254,18 @@ canvas.addEventListener("webglcontextrestored", () => {
 
 usePath(stylised);
 applyChoice(performance.now());
-client.start();
+
+// Demo or live? Live captions the watched apps and names their islands. Failure keeps the demo
+// copy. The stream starts after, so island labels are built with the right names.
+void fetch("/api/v1/info", { credentials: "omit", cache: "no-store" })
+  .then((res) => (res.ok ? res.json() : Promise.reject(new Error(`info ${res.status}`))))
+  .then((json: unknown) => {
+    const info = InfoSchema.parse(json);
+    setDisplayNames(info.sources);
+    hud.setSource(info);
+  })
+  .catch(() => undefined)
+  .finally(() => client.start());
 
 // detect-gpu (self-hosted benchmarks) refines the start tier; only matters in auto mode.
 void detectStartTier(renderer.getContext()).then(({ tier: guess, source }) => {

@@ -122,7 +122,10 @@ export class Boats {
   update(model: WorldModel, budget: number): void {
     let maxRps = 1;
     for (const e of model.edges) maxRps = Math.max(maxRps, e.targetRps);
-    const perEdge = model.edges.map((e) => Math.max(1, Math.round((e.targetRps / maxRps) * 5)));
+    // No traffic (e.g. to an offline app): an empty channel, no boats.
+    const perEdge = model.edges.map((e) =>
+      e.targetRps > 0 ? Math.max(1, Math.round((e.targetRps / maxRps) * 5)) : 0,
+    );
     const key = `${model.topologyVersion}|${perEdge.join(",")}|${budget}`;
     if (key === this.key) return;
     this.key = key;
