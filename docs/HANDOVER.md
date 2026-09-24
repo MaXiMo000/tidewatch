@@ -23,8 +23,10 @@ LabLedger and Quiz-App show **offline** until they are redeployed next month.
 3. **Tokens:** generated for the owner (kept outside the repo). Set `TIDEWATCH_METRICS_TOKEN` on
    `aninest-backend` now, on LabLedger / Quiz-App when they return; the same values go into
    Tidewatch's `TIDEWATCH_SOURCE_TOKENS`. Confirm Quiz-App's backend hostname for its source URL.
-4. Until Render is up, run live mode locally: `.env` from `.env.example` with the live variables,
-   then `docker compose up --build` (https://localhost).
+4. Until Render is up, run live mode locally with the dev servers: `backend/.env` (copied from
+   `.env.example`, git-ignored) with `TIDEWATCH_MODE=live`, `TIDEWATCH_LIVE_PUBLIC=true` and the two
+   JSON variables, then uvicorn (from `backend/`) + `npm run dev` (from `frontend/`), open
+   http://localhost:5173. `deploy/docker-compose.yml` does not pass the live variables through.
 
 **M2 scroll film** (merged, #20; design in ARCHITECTURE s.4 "The scroll film"):
 - `scene/story.ts` (pure, 15 unit tests: chapters, route planning, request path, continuity of the
