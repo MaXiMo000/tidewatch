@@ -1,0 +1,50 @@
+# Production-shaped stack. Build the frontend first:  (cd frontend && npm ci && npm run build)
+# Untested in CI as of the initial scaffold - see docs/HANDOVER.md (M0).
+name: tidewatch
+
+services:
+  backend:
+    build: ../backend
+    restart: unless-stopped
+    environment:
+      TIDEWATCH_ENV: prod
+      TIDEWATCH_MODE: ${TIDEWATCH_MODE:-demo}
+      TIDEWATCH_ALLOWED_ORIGINS: '["https://${TIDEWATCH_DOMAIN:?set TIDEWATCH_DOMAIN}"]'
+      TIDEWATCH_ALLOWED_HOSTS: '["${TIDEWATCH_DOMAIN}"]'
+      # TIDEWATCH_API_KEYS is injected from the host environment / secret manager in live mode.
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    pids_limit: 256
+    mem_limit: 512m
+    networks: [internal]
+    # NOTE: no `ports:` - the backend is never published to the host.
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request as u; u.urlopen('http://127.0.0.1:8000/healthz', timeout=2)"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    ports: ["80:80", "443:443"]
+    environment:
+      TIDEWATCH_DOMAIN: ${TIDEWATCH_DOMAIN}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ../frontend/dist:/srv:ro
+      - caddy_data:/data
+    cap_drop: [ALL]
+    cap_add: [NET_BIND_SERVICE]
+    security_opt: ["no-new-privileges:true"]
+    depends_on: [backend]
+    networks: [internal, public]
+
+networks:
+  internal: {}   # backend + caddy only; backend has no published ports
+  public: {}
+
+volumes:
+  caddy_data: {}

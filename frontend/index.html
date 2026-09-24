@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="referrer" content="no-referrer" />
+    <meta name="color-scheme" content="dark" />
+    <title>Tidewatch</title>
+    <!-- No inline scripts or styles anywhere: the production CSP is script-src 'self'; style-src 'self'. -->
+  </head>
+  <body>
+    <canvas id="scene" aria-label="Live 3D view of service health"></canvas>
+    <div id="hud">
+      <span id="hud-brand">TIDEWATCH</span>
+      <span id="hud-status" role="status" aria-live="polite">connecting…</span>
+    </div>
+    <noscript>Tidewatch needs JavaScript and WebGL to render its live view.</noscript>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

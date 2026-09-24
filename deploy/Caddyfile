@@ -1,0 +1,29 @@
+# Single public origin: static frontend + reverse proxy to the private backend.
+# One origin => no CORS, no cross-site tokens. TLS is automatic (Let's Encrypt; local CA for localhost).
+{$TIDEWATCH_DOMAIN:localhost} {
+	encode zstd gzip
+
+	header {
+		Strict-Transport-Security "max-age=63072000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "no-referrer"
+		Cross-Origin-Opener-Policy "same-origin"
+		Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=()"
+		# Strict CSP: no inline script/style, no third-party origins. WebGL needs no 'unsafe-eval'.
+		# style-src 'self' is fine for GSAP/three (they use CSSOM, not style attributes in markup).
+		Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self' wss://{$TIDEWATCH_DOMAIN:localhost}; worker-src 'self' blob:; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'; upgrade-insecure-requests"
+		-Server
+	}
+
+	handle /api/* {
+		reverse_proxy backend:8000
+	}
+	handle /ws/* {
+		reverse_proxy backend:8000
+	}
+	handle {
+		root * /srv
+		try_files {path} /index.html
+		file_server
+	}
+}
