@@ -57,13 +57,18 @@ foundations come before spectacle.
   - [x] `docker compose up` serves the app over HTTPS locally (`scripts/smoke_compose.py`, 32/32; also a CI job)
   - [x] `scripts/harden-repo.sh` output reviewed (no FAIL; settings read back; 2 gaps closed)
 
-### M1 - Scene foundation + quality tiers
-- Renderer setup, resize, pixel-ratio cap, `detect-gpu` initial tier + live FPS governor (High/Med/Low).
-- Island layout from the service graph (stable positions from topology, not array order).
-- Cheap water shader (gradient + Fresnel + animated normal, no planar reflection on Med/Low),
+### M1 - Scene foundation + quality tiers (built 2026-09-24, PR #14)
+- [x] Renderer setup, resize, pixel-ratio cap, initial tier guess + live FPS governor (High/Med/Low).
+  Own heuristic instead of `detect-gpu` (runtime CDN fetch; see ARCHITECTURE s.5).
+- [x] Island layout from the service graph (stable positions from topology, not array order).
+- [x] Cheap water shader (gradient + Fresnel + animated normal, no planar reflection on any tier yet),
   exponential fog, dusk sky, baked-glow sprites.
-- HUD (compass, status, tier indicator) in HTML/CSS.
-- **Accept:** 60 fps High / 30+ fps Low on the reference low-end device; tier auto-downgrade tested.
+- [x] HUD (compass, status, text health summary, tier control) in HTML/CSS.
+- [x] Playwright smoke test (ARCHITECTURE s.8) against the HTTPS compose stack, in CI.
+- **Accept:**
+  - [ ] 60 fps High / 30+ fps Low on the reference low-end device - **owner action**: no reference
+    device has been chosen or tested yet (PERFORMANCE.md). Measured so far: see HANDOVER.
+  - [x] Tier auto-downgrade tested (`quality/governor.test.ts`: down, up, hysteresis, back-off, pauses)
 
 ### M2 - Scroll movie (chapters 1-3)
 - Lenis smooth scroll + GSAP ScrollTrigger scrubbing a master timeline; camera curve; chapter overlays.
