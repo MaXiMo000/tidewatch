@@ -13,6 +13,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "detect-gpu": "^5.0.70",
     "gsap": "^3.12.5",
     "lenis": "^1.1.0",
     "three": "^0.186.0",

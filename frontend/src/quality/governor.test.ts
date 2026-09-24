@@ -88,6 +88,13 @@ describe("FpsGovernor", () => {
     expect(run(new FpsGovernor("high", 0), 144, 60_000, 0).changes).toEqual([]);
   });
 
+  it("respects the auto ceiling (phones never auto-promote to Cinematic)", () => {
+    const g = new FpsGovernor("medium", 0);
+    g.setCeiling("medium");
+    expect(run(g, 60, 120_000, 0).changes).toEqual([]);
+    expect(g.current).toBe("medium");
+  });
+
   it("only watches while disabled (the user picked a tier)", () => {
     const g = new FpsGovernor("high", 0);
     g.setEnabled(false, 0);

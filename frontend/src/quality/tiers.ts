@@ -7,6 +7,13 @@ export type Tier = "high" | "medium" | "low";
 
 export const TIERS: readonly Tier[] = ["high", "medium", "low"];
 
+/** User-facing names: same world, three render paths (docs/ARCHITECTURE.md s.5). */
+export const TIER_LABEL: Readonly<Record<Tier, string>> = {
+  high: "Cinematic",
+  medium: "Balanced",
+  low: "Simple",
+};
+
 export interface TierSettings {
   /** Upper bound for renderer.setPixelRatio - the single biggest win on weak GPUs. */
   readonly pixelRatioCap: number;
