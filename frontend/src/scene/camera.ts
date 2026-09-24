@@ -178,6 +178,15 @@ export class CameraRig {
     this.base.focus = this.camera.position.distanceTo(this.look);
   }
 
+  /** Add a small positional offset this frame (the failure shake), after applyStory(). */
+  nudge(offset: { x: number; y: number; z: number }): void {
+    if (offset.x === 0 && offset.y === 0 && offset.z === 0) return;
+    this.camera.position.x += offset.x;
+    this.camera.position.y += offset.y;
+    this.camera.position.z += offset.z;
+    this.camera.lookAt(this.look);
+  }
+
   /** Compass heading in degrees, 0 = looking north (-z), clockwise; follows the actual view. */
   get heading(): number {
     const az = Math.atan2(this.camera.position.x - this.look.x, this.camera.position.z - this.look.z);

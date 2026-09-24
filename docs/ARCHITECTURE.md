@@ -90,9 +90,11 @@ backend serves both during a deprecation window.
 | `hud/inspector.ts` | Island labels (focusable buttons, collision layout), screen-space picking (same on every tier), stats card |
 | `hud/copy.ts` | HUD wording: status words, per-kind subtitles, number formats |
 | `scene/islands.ts` | Islets + kind-specific structures, per-island health animation (amber pulse, red flicker), one instanced glow batch; "pbr" (Cinematic) or "flat" (Balanced/Simple, one merged mesh per islet) |
-| `scene/boats.ts` | Requests as GPU-animated boats on every channel (count follows rps); Cinematic adds wakes |
+| `scene/boats.ts` | Requests as GPU-animated boats on every channel (count follows rps); boats into an erroring island sink (per-instance `aSink`); Cinematic adds wakes |
 | `scene/silhouette.ts`, `glows.ts`, `random.ts` | Kind -> structure + label heights; instanced billboards; seeded PRNG |
 | `scene/story.ts` | The scroll film as pure functions of progress p: chapters, the request's route (from the live topology), its position, the camera shot; reduced-motion stills |
+| `scene/weather.ts` | Balanced/Simple weather: latency fog, mist banks, storm clouds (one instanced billboard draw call), lightning light boost |
+| `scene/weather-rules.ts` | Pure data -> weather rules: fog scale, mist amount, sink share, `LightningClock` (>= 2.5 s apart), `Shake` |
 | `scene/beacon.ts` | The film's hero request: one warm light (2 draw calls), attached to the active render path |
 | `hud/story.ts` | Film DOM: scroll progress, current chapter (`html[data-chapter]`, rail `aria-current`), route names in the chapter text |
 | `debug/overlay.ts` | `?debug=1` fps / CPU ms / draw calls / triangles - dev builds only |
@@ -117,7 +119,6 @@ Planned (M3+):
 
 ```
 src/
-  scene/     particles.ts  weather.ts
   live/      freefly.ts  panel.ts  feed.ts  fallback2d.ts
   audio/     ambience.ts (optional, off by default)
 ```

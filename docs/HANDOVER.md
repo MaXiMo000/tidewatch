@@ -3,7 +3,7 @@
 Audience: Claude Code (or any engineer) picking this project up cold. Read this file, then
 `CLAUDE.md`, then the milestone you are working on in `docs/PLAN.md`.
 
-## 0. Current state: M5 merged (PR #16); M2 scroll film in review (branch `m2-scroll-movie`)
+## 0. Current state: M5 merged (PR #16); M2 (PR #20) and M3 (stacked on it) in review
 
 **M5 live data is merged** (PR #16): metrics add-ons in AniNest/Quiz-App/LabLedger (`addons/`),
 `LiveSource`, offline islands, Render deployment files, owner risk acceptance in SECURITY.md.
@@ -22,9 +22,19 @@ Blueprint). LabLedger and Quiz-App show **offline** until they are redeployed ne
 - Perf: scrolling costs the same as idle on Low (4.7 vs 5.4 ms/frame, headless SwiftShader); a
   mid-scroll shader-compile stall (beacon's first draw) was found with the profiler and fixed.
 
-Not verified: iOS Safari, Android Chrome, desktop Firefox; real low-end hardware; fps on real GPUs.
-Next after M2: **M3** (chapters 4-5 weather driven by data: instanced request particles, storm,
-failure flash/sinking), then M4, M6.
+**M3 data-driven weather** (branch `m3-data-visuals`, stacked on M2 - merge #20 first):
+- `scene/weather-rules.ts` (pure, 6 tests: fog scale, mist, sink share, lightning >= 2.5 s apart,
+  shake rate limit, all off under reduced motion) and `scene/weather.ts` (Balanced/Simple: latency
+  fog, mist banks, storm clouds in ONE instanced draw call, lightning light boost).
+- Boats into an erroring island sink (boat vertex shader, every tier); channels into a failing
+  island run red; the camera shakes briefly when a service newly fails (`model.failureEvents`).
+- Budgets over a full demo incident: Simple 26 calls / 8.4k tris, Balanced 27 / 15k.
+- Screenshots `docs/screenshots/m3/` (calm, degraded, failing on Balanced and Simple; storm chapter).
+- Also fixes found while testing: the live card fades once the view settles (`html[data-settled]`).
+
+Not verified: iOS Safari, Android Chrome, desktop Firefox; real low-end hardware; fps on real GPUs;
+sinking boats were checked for shader errors (E2E console) but not caught mid-sink on camera.
+Next: **M4** (free-fly, event feed, photo mode, 2D fallback, a11y), then M6.
 
 Rules unchanged: app repos may have **uncommitted local work that is not ours - never stage,
 stash, reset or discard it**; don't curl the apps' live URLs without asking.
@@ -46,7 +56,7 @@ stash, reset or discard it**; don't curl the apps' live URLs without asking.
   suite ran against `mongo:7` and Quiz-App's `mongodb-memory-server` used the image's `mongod`
   (`MONGOMS_SYSTEM_BINARY`) because the sandbox blocks fastdl.mongodb.org.
 
-## 1. Where things stand (M0, M1, art pass, M5 merged; M2 in review; then M3)
+## 1. Where things stand (M0, M1, art pass, M5 merged; M2 + M3 in review; then M4)
 
 ### Built
 - **Backend** (`backend/app/`): config validation, strict schemas, security primitives,

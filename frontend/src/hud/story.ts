@@ -46,6 +46,9 @@ export class StoryUi {
 
   /** Update chapter markers for progress p (the unsmoothed scroll position). */
   setProgress(p: number): void {
+    // Once the camera has fully handed over, the live card has said its piece: fade it out.
+    const settled = p >= 0.96 ? "1" : "0";
+    if (this.root.dataset["settled"] !== settled) this.root.dataset["settled"] = settled;
     const index = chapterIndex(p);
     if (index === this.chapter) return;
     this.chapter = index;

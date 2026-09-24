@@ -57,6 +57,8 @@ export class WorldModel {
   /** Bumped whenever islands/edges are rebuilt, so render paths know to rebuild meshes. */
   topologyVersion = 0;
   lastSeq = -1;
+  /** Bumped each time a known service turns failing (drives the camera shake). */
+  failureEvents = 0;
 
   private key = "";
   private targetLatency = 0;
@@ -75,6 +77,7 @@ export class WorldModel {
     for (const svc of snap.services) {
       const isl = this.islands.get(svc.id);
       if (!isl) continue;
+      if (svc.status === "failing" && isl.status !== "failing") this.failureEvents += 1;
       isl.status = svc.status;
       isl.targetScale = trafficScale(svc.rps);
       isl.targetP95 = svc.p95_ms;
