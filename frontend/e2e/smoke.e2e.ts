@@ -251,9 +251,14 @@ test("keyboard: the first Tab stop skips the story, the rail jumps to any chapte
   await expect(hops).toHaveAttribute("aria-current", "step");
 });
 
-test("a chapter link is a real URL: /#live opens the live view", async ({ page }) => {
-  await page.goto("/?quality=medium#live");
-  await expect(page.locator("html")).toHaveAttribute("data-chapter", "live", { timeout: 15_000 });
+test("every chapter link is a real URL that opens that chapter (/#live, /#chapter-storm, ...)", async ({
+  page,
+}) => {
+  // Also guards the section heights: they must put each anchor exactly on its storyboard start.
+  for (const id of ["chapter-request", "chapter-hops", "chapter-storm", "chapter-failure", "live"]) {
+    await page.goto(`/?quality=low#${id}`);
+    await expect(page.locator("html")).toHaveAttribute("data-chapter", id, { timeout: 15_000 });
+  }
   await expect(page.locator("html")).toHaveAttribute("data-film", "0");
 });
 

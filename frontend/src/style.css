@@ -716,6 +716,8 @@ kbd {
 
 .chapter {
   position: relative;
+  /* Contain child margins (the live card's), or they collapse through and shift every section. */
+  display: flow-root;
 }
 
 #chapter-aerial {

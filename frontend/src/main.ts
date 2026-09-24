@@ -282,7 +282,11 @@ usePath(stylised);
 applyChoice(performance.now());
 // Web fonts change the chapter cards' height only inside fixed-height sections, but re-measure
 // once they land anyway, in case a browser lays the page out differently.
-void document.fonts?.ready.then(() => storyUi.measure());
+void document.fonts?.ready.then(() => {
+  storyUi.measure();
+  // Only if the visitor has not scrolled yet: never yank someone back to the anchor.
+  if (window.scrollY < 2) storyUi.followHash();
+});
 
 // Demo or live? Live captions the watched apps and names their islands. Failure keeps the demo
 // copy. The stream starts after, so island labels are built with the right names.

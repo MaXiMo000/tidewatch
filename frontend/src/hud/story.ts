@@ -23,6 +23,17 @@ export class StoryUi {
     this.measure();
   }
 
+  /**
+   * Re-apply a chapter anchor from the URL (/#live, /#chapter-hops). The browser's own jump can
+   * happen before the stylesheet gives the sections their height (always so in dev, where Vite
+   * injects CSS from JS), leaving the page at the top; call once layout is final.
+   */
+  followHash(): void {
+    const id = decodeURIComponent(location.hash.slice(1));
+    if (!/^(chapter-[a-z]+|live)$/.test(id)) return;
+    document.getElementById(id)?.scrollIntoView({ behavior: "instant", block: "start" });
+  }
+
   /** Call on resize (and once fonts settle): the scroll range is cached, not read per frame. */
   measure(): void {
     this.scrollRange = Math.max(1, document.documentElement.scrollHeight - window.innerHeight);
