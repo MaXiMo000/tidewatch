@@ -148,6 +148,58 @@ body {
   outline-offset: 2px;
 }
 
+#hud-loading {
+  position: fixed;
+  left: 50%;
+  bottom: 28px;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  font: 11px var(--mono);
+  letter-spacing: 0.12em;
+  color: var(--dim);
+}
+
+#hud-loading[hidden] {
+  display: none;
+}
+
+#hud-loading-bar {
+  width: 180px;
+  height: 2px;
+  appearance: none;
+  border: 0;
+  background: var(--edge);
+}
+
+#hud-loading-bar::-webkit-progress-bar {
+  background: var(--edge);
+}
+
+#hud-loading-bar::-webkit-progress-value {
+  background: var(--fg);
+}
+
+#hud-loading-bar::-moz-progress-bar {
+  background: var(--fg);
+}
+
+#hud-notice {
+  position: fixed;
+  left: 50%;
+  top: 56px;
+  transform: translateX(-50%);
+  margin: 0;
+  font: 12px var(--mono);
+  color: var(--fg);
+}
+
+#hud-notice:empty {
+  display: none;
+}
+
 #debug-overlay {
   position: fixed;
   top: 64px;
@@ -158,6 +210,38 @@ body {
   background: var(--panel);
   border: 1px solid var(--edge);
   pointer-events: none;
+}
+
+#tuning-panel {
+  position: fixed;
+  top: 64px;
+  right: 16px;
+  width: 260px;
+  max-height: calc(100vh - 140px);
+  overflow: auto;
+  padding: 10px 12px;
+  font: 11px/1.4 var(--mono);
+  background: rgb(8 10 20 / 88%);
+  border: 1px solid var(--edge);
+  z-index: 10;
+}
+
+#tuning-panel label {
+  display: grid;
+  grid-template-columns: 1fr 52px;
+  gap: 2px 8px;
+  margin-bottom: 6px;
+}
+
+#tuning-panel input[type="range"],
+#tuning-panel input[type="color"] {
+  grid-column: 1 / -1;
+  width: 100%;
+}
+
+#tuning-panel button {
+  font: inherit;
+  margin-top: 6px;
 }
 
 @media (prefers-reduced-motion: reduce) {

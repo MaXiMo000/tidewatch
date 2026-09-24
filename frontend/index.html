@@ -6,6 +6,7 @@
     <meta name="referrer" content="no-referrer" />
     <meta name="color-scheme" content="dark" />
     <meta name="description" content="A live 3D view of service health: islands are services, channels are traffic." />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <title>Tidewatch</title>
     <!-- No inline scripts or styles anywhere: the production CSP is script-src 'self'; style-src 'self'. -->
   </head>
@@ -32,6 +33,11 @@
         </div>
         <button id="hud-tier" type="button">quality: …</button>
       </footer>
+      <div id="hud-loading" hidden>
+        <label id="hud-loading-label" for="hud-loading-bar">Loading</label>
+        <progress id="hud-loading-bar" max="100" value="0"></progress>
+      </div>
+      <p id="hud-notice" role="status" aria-live="polite"></p>
     </main>
     <noscript>Tidewatch needs JavaScript and WebGL to render its live view.</noscript>
     <script type="module" src="/src/main.ts"></script>

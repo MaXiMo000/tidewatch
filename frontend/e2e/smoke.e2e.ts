@@ -87,14 +87,26 @@ test("renders a real scene (not a blank or single-colour canvas)", async ({ page
   expect(stats.meanLuma).toBeGreaterThan(20);
 });
 
+const LABEL = { high: "Cinematic", medium: "Balanced", low: "Simple" } as const;
+const CINEMATIC_CHUNK = /\/assets\/cinematic-[^/]+\.js$/;
+
 for (const tier of ["high", "medium", "low"] as const) {
-  test(`?quality=${tier} renders on that tier`, async ({ page }) => {
+  test(`?quality=${tier} renders on that tier (${LABEL[tier]})`, async ({ page }) => {
     const found = await watch(page);
+    const chunkRequests: string[] = [];
+    page.on("request", (r) => {
+      if (CINEMATIC_CHUNK.test(new URL(r.url()).pathname)) chunkRequests.push(r.url());
+    });
     await page.goto(`/?quality=${tier}`);
     await expect(page.locator("html")).toHaveAttribute("data-tier", tier);
-    await expect(page.locator("#hud-tier")).toHaveText(`quality: ${tier}`);
-    await expect(page.locator("#hud-summary")).not.toBeEmpty({ timeout: 15_000 });
+    await expect(page.locator("#hud-tier")).toHaveText(LABEL[tier]);
+    const path = tier === "high" ? "cinematic" : "stylised";
+    await expect(page.locator("html")).toHaveAttribute("data-path", path, { timeout: 30_000 });
+    await expect(page.locator("html")).toHaveAttribute("data-ready", "1", { timeout: 30_000 });
     expect((await canvasStats(page)).distinct).toBeGreaterThan(40);
+    // Balanced and Simple must never download the Cinematic code.
+    expect(chunkRequests.length > 0).toBe(tier === "high");
+    expect(found.csp).toEqual([]);
     expect(found.errors).toEqual([]);
   });
 }
@@ -106,10 +118,10 @@ test("quality button cycles auto -> high -> medium -> low -> auto and is keyboar
   const button = page.locator("#hud-tier");
   await expect(button).toHaveText(/\(auto\)$/);
   await button.focus();
-  for (const tier of ["high", "medium", "low"]) {
+  for (const tier of ["high", "medium", "low"] as const) {
     await page.keyboard.press("Enter");
     await expect(page.locator("html")).toHaveAttribute("data-tier", tier);
-    await expect(button).toHaveAccessibleName(new RegExp(`Rendering quality ${tier}\\.`));
+    await expect(button).toHaveAccessibleName(new RegExp(`Rendering quality ${LABEL[tier]}\\.`));
   }
   await page.keyboard.press("Enter");
   await expect(button).toHaveText(/\(auto\)$/);

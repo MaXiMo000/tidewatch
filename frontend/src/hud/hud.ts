@@ -6,7 +6,7 @@
  * strings). Writes happen only when a value changes, so the per-frame cost is a few comparisons.
  */
 import type { ConnState } from "../net/client";
-import type { Tier } from "../quality/tiers";
+import { TIER_LABEL, type Tier } from "../quality/tiers";
 
 export type TierChoice = Tier | "auto";
 
@@ -33,6 +33,8 @@ export class Hud {
   private readonly needle = el<HTMLElement>("#hud-compass-rose");
   private readonly heading = el<HTMLElement>("#hud-heading");
   private readonly tierButton = el<HTMLButtonElement>("#hud-tier");
+  private readonly notice = el<HTMLElement>("#hud-notice");
+  private noticeTimer: number | null = null;
   private last = { status: "", summary: "", heading: -1, tier: "" };
 
   constructor(onChoice: (choice: TierChoice) => void, getChoice: () => TierChoice) {
@@ -65,16 +67,27 @@ export class Hud {
       this.last.heading = heading;
     }
 
-    const tier = s.choice === "auto" ? `quality: ${s.tier} (auto)` : `quality: ${s.tier}`;
+    const label = TIER_LABEL[s.tier];
+    const tier = s.choice === "auto" ? `${label} (auto)` : label;
     if (tier !== this.last.tier) {
       this.tierButton.textContent = tier;
       this.tierButton.setAttribute(
         "aria-label",
-        `Rendering quality ${s.tier}${s.choice === "auto" ? ", chosen automatically" : ""}. ` +
+        `Rendering quality ${label}${s.choice === "auto" ? ", chosen automatically" : ""}. ` +
           "Press to change.",
       );
       this.last.tier = tier;
     }
+  }
+
+  /** A short, non-blocking message (polite live region), cleared after a few seconds. */
+  showNotice(message: string): void {
+    this.notice.textContent = message;
+    if (this.noticeTimer !== null) window.clearTimeout(this.noticeTimer);
+    this.noticeTimer = window.setTimeout(() => {
+      this.notice.textContent = "";
+      this.noticeTimer = null;
+    }, 6_000);
   }
 
   showFatal(message: string): void {

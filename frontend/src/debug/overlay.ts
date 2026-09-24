@@ -17,7 +17,7 @@ export class DebugOverlay {
   }
 
   /** Call once per rendered frame with the CPU time spent in update + render. */
-  frame(now: number, workMs: number, renderer: WebGLRenderer, tier: string): void {
+  frame(now: number, workMs: number, renderer: WebGLRenderer, tier: string, gpuBytes: number): void {
     this.frames += 1;
     this.workMs += workMs;
     if (this.since === 0) this.since = now;
@@ -30,6 +30,7 @@ export class DebugOverlay {
       `calls     ${info.calls}`,
       `triangles ${info.triangles}`,
       `tier      ${tier}`,
+      `gpu mem   ~${(gpuBytes / 1048576).toFixed(1)} MB (targets+textures)`,
       `dpr       ${renderer.getPixelRatio().toFixed(2)}`,
     ].join("\n");
     this.frames = 0;
