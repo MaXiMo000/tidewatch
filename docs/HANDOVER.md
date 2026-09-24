@@ -26,7 +26,7 @@ Screenshots and critique logs: `docs/screenshots/round-1/`, `docs/screenshots/ro
 
 | Tier | fps (this machine: Intel UHD, i3-1125G4, 1440x900, dpr 1) | Draw calls | Triangles | GPU mem (est.) | Download beyond initial |
 | --- | --- | --- | --- | --- | --- |
-| Cinematic | **41** (headed Chrome) - below the Iris Xe floor, as expected for this GPU | 169 | 300k | 28 MB | 14.8 KB gzip JS (all procedural) |
+| Cinematic | **41** (headed Chrome, before the understory pass) - this GPU is below the Iris Xe floor | 173 | 308k | 28 MB | 15.1 KB gzip JS (all procedural) |
 | Balanced | not measured headed (headless throttles rAF; see below) | 39 | 7k | ~0 | none |
 | Simple | not measured headed | 25 | 3k | ~0 | none |
 

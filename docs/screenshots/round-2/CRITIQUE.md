@@ -13,7 +13,8 @@ Same GPU as Round 1 (Intel UHD, i3-1125G4, D3D11).
 | e | Readable at a glance: lighthouse, tower, stilt hall, jetty, beacon, workshop, vault (status ring) | (desktop accepted) |
 | f/g | Phone: moss curtain from a hero tree mid-frame; Balanced: giant blob trees, brown water | Placement uses the real horizontal FOV; portrait camera a bit higher; stylised ring further out, slimmer trees; stylised water reflects the teal fog |
 | h | Phone: camera inside a canopy (crowns ~0.4x height wide crossed the narrow frustum) | Crown-aware clearance from the frustum edge and sight lines; eye clearance; no hero trees in portrait |
-| i + final | Phone reads as a tree-lined channel with every structure visible; desktop unchanged | Static structure meshes merged per material (draw calls 270 -> 169) without visual change |
+| i | Phone reads as a tree-lined channel with every structure visible; desktop unchanged | Static structure meshes merged per material (draw calls 270 -> 169) without visual change |
+| j (owner feedback) | Background trees read as bare trunks, some looking like they float above the water: crowns started too high, nothing grew below them, and the densest fog sat exactly at the waterline, fading the trunk bases into a pale band | Crowns from ~30% height; understory bushes around 80% of bases and along the banks; a dark root mound under every trunk; fog spread higher (height 2.2 -> 4.2, density 0.022 -> 0.016). Trees on islets removed: their fuller crowns hid the structures |
 
 Open for Rounds 3-4: light shafts through the canopy, bloom on lanterns/glint, fireflies, boats and
 wakes, health drama (amber pulse / red flicker / storm / rain / lightning), HUD + labels; Balanced
