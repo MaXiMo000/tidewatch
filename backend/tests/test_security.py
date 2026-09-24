@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Iterator
 
 import pytest
 from fastapi.testclient import TestClient
@@ -27,13 +28,13 @@ def make_settings(**overrides: object) -> Settings:
 
 
 @pytest.fixture
-def client() -> TestClient:
+def client() -> Iterator[TestClient]:
     with TestClient(create_app(make_settings())) as c:
-        yield c  # type: ignore[misc]
+        yield c
 
 
-def get_ticket(c: TestClient, **kw: object) -> str:
-    r = c.post("/api/v1/ws-ticket", **kw)  # type: ignore[arg-type]
+def get_ticket(c: TestClient) -> str:
+    r = c.post("/api/v1/ws-ticket")
     assert r.status_code == 200, r.text
     return str(r.json()["ticket"])
 
@@ -149,7 +150,9 @@ def test_config_rejects_wildcards_and_weak_prod() -> None:
 
 
 def test_schema_rejects_unknown_and_out_of_range_fields() -> None:
-    good = {"id": "api", "kind": "service", "rps": 1, "p95_ms": 1, "error_rate": 0.1, "status": "ok"}
+    good = {
+        "id": "api", "kind": "service", "rps": 1, "p95_ms": 1, "error_rate": 0.1, "status": "ok"
+    }
     ServiceMetrics.model_validate(good)
     with pytest.raises(ValidationError):
         ServiceMetrics.model_validate({**good, "secret_label": "leak"})

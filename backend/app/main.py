@@ -3,7 +3,8 @@
 Endpoints
   GET  /healthz              liveness (no data)
   POST /api/v1/ws-ticket     issue a single-use, short-lived WebSocket ticket
-  WS   /ws/v1/stream         metrics stream (first client message must be {"type":"auth","ticket":...})
+  WS   /ws/v1/stream         metrics stream
+                             (first client message must be {"type":"auth","ticket":...})
 
 Security notes live in docs/SECURITY.md. Highlights implemented here:
   * Origin allowlist on the WebSocket handshake (blocks cross-site WebSocket hijacking)
