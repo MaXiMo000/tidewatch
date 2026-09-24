@@ -1,7 +1,6 @@
 # M5 - Live data: owner decisions, design, task list
 
-Status: **implemented, in review** (PR #16, branch `m5-live`): steps 1-9 below are done; s.5 is the
-owner's part. State and evidence: `docs/HANDOVER.md` s.0.
+Status: **merged** (PR #16): steps 1-9 below are done; s.5 is the owner's part. State and evidence: `docs/HANDOVER.md` s.0.
 Read `docs/HANDOVER.md` section 0 first, then this file.
 
 ## 1. Owner decisions (2026-09-24) - do not re-ask
@@ -145,8 +144,15 @@ two dark/offline, caption "Live". Record in HANDOVER.
 3. Render -> New -> Blueprint -> pick the `tidewatch` repo (uses `render.yaml`) -> set
    `TIDEWATCH_SOURCE_TOKENS={"aninest":"...","labledger":"...","quiz":"..."}` and confirm the
    source URLs -> Deploy. Open the `*.onrender.com` URL (first load ~1 min on free).
+   **Alternative without the Blueprint** (use it when a Blueprint sync fails with no log - on
+   2026-09-24 the cause was the workspace's free-instance limit): New -> Web Service -> the
+   `tidewatch` repo, branch `main`; Language Docker; Dockerfile Path `./deploy/render/Dockerfile`;
+   Docker Build Context `.`; instance Free (or Starter); Health Check Path `/healthz`; environment:
+   `TIDEWATCH_ENV=prod`, `TIDEWATCH_MODE=live`, `TIDEWATCH_LIVE_PUBLIC=true`,
+   `TIDEWATCH_LIVE_SOURCES` (one-line JSON list) and `TIDEWATCH_SOURCE_TOKENS` (one-line JSON map).
+   With Render's "Add from .env", wrap the two JSON values in single quotes and check that Render
+   stored them without the quotes.
 Claude cannot create accounts, sign in or enter secrets for the owner.
 
-## 6. Still pending after M5 (unchanged)
-M2 scroll movie, M3 remaining data-driven items, M4 free-fly/2D fallback/a11y, M6 hardening -
-see `docs/PLAN.md`. The art pass left: fps not measured on faster GPUs or phones.
+## 6. After M5
+M2, M3, M4 and M6 are merged (#20-#23), plus island batching (#24). See `docs/HANDOVER.md` s.0.

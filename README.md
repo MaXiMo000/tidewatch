@@ -7,7 +7,7 @@ stay smooth on low-end devices.
 
 ![Scrolling through the Tidewatch film: an aerial view of the archipelago, one request crossing the water to the lighthouse and hopping island to island, then the live view](docs/screenshots/m6/tidewatch-film.gif)
 
-> Status: **v0.1.0 candidate** (M0-M6 built; M2-M6 in review). What is and is not verified is
+> Status: **v0.1.0** (M0-M6 merged; tag and Render deploy pending, see docs/HANDOVER.md s.0). What is and is not verified is
 > listed in [`docs/HANDOVER.md`](docs/HANDOVER.md).
 
 ## What you get
