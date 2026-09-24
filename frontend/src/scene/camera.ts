@@ -15,6 +15,10 @@ const DRIFT_RAD_PER_S = 0.03;
 const SWEEP_PERIOD_S = 110;
 const DEFAULT_BASE_AZIMUTH = -0.75;
 const PARALLAX_RAD = 0.06;
+/** "On a drifting boat": slow bob (world units), push in/out (fraction) and roll (radians). */
+const FLOAT_BOB = 0.14;
+const FLOAT_DOLLY = 0.035;
+const FLOAT_ROLL = 0.006;
 
 export class CameraRig {
   readonly camera: THREE.PerspectiveCamera;
@@ -22,6 +26,7 @@ export class CameraRig {
   private azimuth = DEFAULT_BASE_AZIMUTH;
   private islands: { x: number; z: number }[] = [];
   private sweepPhase = 0;
+  private floatT = 0;
   /** Composition anchor (no drift, no parallax), shared with render paths for placement. */
   readonly base = { eye: new THREE.Vector3(), target: new THREE.Vector3(), spread: 0.6, focus: 20 };
   private readonly target = new THREE.Vector3();
@@ -132,6 +137,7 @@ export class CameraRig {
 
   tick(dtSeconds: number): void {
     if (!this.reducedMotion) {
+      this.floatT += dtSeconds;
       if (this.shot.sweep > 0) {
         this.sweepPhase += (dtSeconds * Math.PI * 2) / SWEEP_PERIOD_S;
         this.azimuth = this.baseAzimuth + this.shot.sweep * Math.sin(this.sweepPhase);
@@ -146,13 +152,18 @@ export class CameraRig {
     this.parallax.y += (py - this.parallax.y) * k;
     const az = this.azimuth + this.parallax.x * PARALLAX_RAD;
     const el = Math.max(0.03, this.elevation + this.parallax.y * PARALLAX_RAD * 0.5);
-    const flat = Math.cos(el) * this.distance;
+    // Floating: never exactly still, but slow enough to read as calm (floatT stops under reduced motion).
+    const f = this.floatT;
+    const distance = this.distance * (1 + FLOAT_DOLLY * Math.sin(f * 0.13));
+    const bob = f === 0 ? 0 : FLOAT_BOB * (Math.sin(f * 0.5) + 0.6 * Math.sin(f * 0.23 + 1.3));
+    const flat = Math.cos(el) * distance;
     this.camera.position.set(
       this.target.x + Math.sin(az) * flat,
-      this.target.y + Math.sin(el) * this.distance,
+      this.target.y + Math.sin(el) * distance + bob,
       this.target.z + Math.cos(az) * flat,
     );
     this.camera.lookAt(this.target);
+    if (f > 0) this.camera.rotateZ(FLOAT_ROLL * Math.sin(f * 0.31 + 0.7));
     this.look.copy(this.target);
     this.base.focus = this.camera.position.distanceTo(this.look);
   }

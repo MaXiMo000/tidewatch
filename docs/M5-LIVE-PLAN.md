@@ -18,7 +18,7 @@ Read `docs/HANDOVER.md` section 0 first, then this file.
 | App | Repo | Stack | Deploy | Dependencies worth islands |
 | --- | --- | --- | --- | --- |
 | AniNest | `MaXiMo000/AniNest`, branch `master` | Express (ESM, `backend/src/server.js`), libSQL/Turso (`@libsql/client`), helmet, cors, express-rate-limit, pino | Render `aninest-backend` (plan **starter**, i.e. paid, always on) - `https://aninest-backend.onrender.com`, health `/api/health` | database (libSQL); external anime API(s) if it calls them (check `backend/src`) |
-| Quiz-App | `MaXiMo000/Quiz-App`, branch `main` | Express (ESM, `backend/server.js`), mongoose, ioredis/redis, socket.io, axios, OpenAI/Gemini/Together | Render (URL seen in docs: `https://quiz-app-cp2h.onrender.com`) - down until next month | database (MongoDB via driver command monitoring), cache (Redis), AI API (optional) |
+| Quiz-App | `MaXiMo000/Quiz-App`, branch `main` | Express (ESM, `backend/server.js`), mongoose, ioredis/redis, socket.io, axios, OpenAI/Gemini/Together | Render: `https://quiz-app-cp2h.onrender.com` is the **frontend** (answers any path with its HTML); the backend, from the frontend bundle, is `https://quiz-app-backend-0ina.onrender.com` - down until next month | database (MongoDB via driver command monitoring), cache (Redis), AI API (optional) |
 | LabLedger | `MaXiMo000/LabLedger`, branch `main` | FastAPI (`backend/app/main.py`), beanie/MongoDB, Redis + arq worker, httpx | Render `labledger-api` (free) - `https://labledger-api.onrender.com`, health `/api/health` - down until next month | database (pymongo `CommandListener`), queue/worker (Redis/arq) |
 
 Do not probe these live URLs with curl without asking (the owner declined that once).

@@ -136,7 +136,7 @@ backend serves both during a deprecation window.
 | Lighting | ACES tone mapping (post), 1 directional light + 1 soft PCF shadow cascade, hemisphere + PMREM | hemisphere + directional, no shadows | same |
 | Water | planar reflection (Reflector, half-float, `reflectionScale`), 3 normal layers, Fresnel, glint column | shader with fake (sky) reflection, animated normals | flat gradient + Fresnel |
 | Atmosphere | half-res raymarched height fog (noise, HG scatter), colour/density follow p95 | FogExp2 | FogExp2 |
-| World | mossy islets with kind-specific structures (lighthouse, tower, stilt hall, beacon, vault, jetty, workshop), instanced cypress + moss + knees, lily pads, reeds | low-poly islands, instanced silhouette treeline (90) | same, 30 trees, no glow sprites |
+| World | mossy islets with kind-specific structures (lighthouse, tower, stilt hall, beacon, vault, jetty, workshop), instanced cypress (layered spray cards, mip-aware alpha so far crowns stay full) + moss + knees, drifting lily pads and flowers, reeds, a heron flock crossing the far channel | low-poly islands, instanced silhouette treeline (90) | same, 30 trees, no glow sprites |
 | Post | bloom (lanterns/glint only), half-res height fog, depth AO + light shafts, subtle DOF, ACES, teal/pink grade, light CA, vignette, grain, lightning flash | CSS vignette | CSS vignette |
 | Requests / health | boats + wakes, shore foam, amber pulse / red flicker, storm clouds, rain, lightning, fireflies | boats, amber pulse / red flicker | boats, pulse/flicker, no glow |
 | Pixel ratio cap / target fps | 2 / 60 | 1.5 / 60 | 1 / 30 |
@@ -144,7 +144,9 @@ backend serves both during a deprecation window.
 Shared by all paths: `scene/model.ts` (layout, eased values, counts, latency, storm), the camera
 rig and the HUD. The Cinematic camera does a slow pendulum drift around a composed base azimuth
 (chosen to separate the islands; the sun is placed relative to it so the glint faces the viewer);
-stylised paths orbit. Under prefers-reduced-motion the camera holds still.
+stylised paths orbit. On top of either, the camera floats as if on a drifting boat (slow bob,
+push in/out, a hint of roll). Under prefers-reduced-motion the camera holds still and the herons
+stay away.
 
 ### Cinematic asset pipeline
 

@@ -14,6 +14,7 @@ import type { WorldModel } from "../scene/model";
 import { makeWaterNormalMap } from "./noise";
 import { Boats } from "../scene/boats";
 import { WakeField } from "./boats";
+import { Birds } from "./birds";
 import { Drama } from "./drama";
 import { Foliage } from "./foliage";
 import { Islands } from "../scene/islands";
@@ -48,6 +49,7 @@ class CinematicPath implements RenderPath {
   private readonly boats = new Boats();
   private readonly wakes = new WakeField(this.boats);
   private readonly drama = new Drama();
+  private readonly birds = new Birds();
   private wakeFit = -1;
 
   constructor(
@@ -61,7 +63,7 @@ class CinematicPath implements RenderPath {
     this.water = new CinematicWater(this.normalMap);
     this.scene.fog = this.fog;
     this.scene.add(this.sky.mesh, this.water.mesh, this.sun, this.sun.target, this.hemi);
-    this.scene.add(this.islands.root, this.foliage.root, this.boats.mesh, this.drama.root);
+    this.scene.add(this.islands.root, this.foliage.root, this.boats.mesh, this.drama.root, this.birds.mesh);
     // One soft shadow cascade over the archipelago (islets and structures cast and receive).
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
@@ -140,6 +142,7 @@ class CinematicPath implements RenderPath {
     this.water.setSurface(this.wakes.texture, this.wakes.rect, this.islands.shores, this.drama.rain);
     this.foliage.update(this.model, view);
     this.foliage.tick(t, this.reducedMotion, this.sunDir);
+    this.birds.tick(t, view, this.reducedMotion);
     // Shadow frustum fitted to the archipelago, lit from the low sun (raised a little so shadows
     // stay short enough to read).
     const b = this.model.bounds;
@@ -195,6 +198,7 @@ class CinematicPath implements RenderPath {
     this.drama.dispose();
     this.islands.dispose();
     this.foliage.dispose();
+    this.birds.dispose();
     this.post.dispose();
     this.water.dispose();
     this.envTarget?.dispose();
