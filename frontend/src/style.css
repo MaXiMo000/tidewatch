@@ -33,12 +33,22 @@
 html,
 body {
   margin: 0;
-  height: 100%;
   background: var(--bg);
   color: var(--fg);
   font-family: var(--serif);
-  overflow: hidden;
   -webkit-font-smoothing: antialiased;
+}
+
+/* The page scrolls (the film is scroll-driven); the scene and HUD stay fixed. No horizontal scroll. */
+html {
+  overflow-x: hidden;
+  overscroll-behavior-y: none;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  html {
+    scroll-behavior: smooth;
+  }
 }
 
 #scene {
@@ -47,6 +57,7 @@ body {
   width: 100%;
   height: 100%;
   display: block;
+  z-index: 0;
 }
 
 /* Cheap CSS vignette on every tier (Cinematic adds its own in post; this one is gentle). */
@@ -60,6 +71,7 @@ body {
 #hud {
   position: fixed;
   inset: 0;
+  z-index: 3;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
@@ -451,6 +463,7 @@ kbd {
   position: fixed;
   inset: 0;
   pointer-events: none;
+  z-index: 1;
 }
 
 .island-label {
@@ -689,6 +702,197 @@ kbd {
   }
 }
 
+/* ---------- the scroll film (scene/story.ts) ---------- */
+/*
+ * Section heights put each chapter's top exactly at its storyboard start: with a scroll range R =
+ * 700vh, chapter i is (end - start) * R tall and the last one adds a viewport, so an anchor jump
+ * to #chapter-hops lands on p = 0.30. Keep in sync with CHAPTERS in scene/story.ts.
+ */
+#story {
+  position: relative;
+  z-index: 2;
+  pointer-events: none;
+}
+
+.chapter {
+  position: relative;
+}
+
+#chapter-aerial {
+  height: 84vh;
+}
+
+#chapter-request {
+  height: 126vh;
+}
+
+#chapter-hops {
+  height: 175vh;
+}
+
+#chapter-storm {
+  height: 140vh;
+}
+
+#chapter-failure {
+  height: 105vh;
+}
+
+#live {
+  height: 170vh;
+}
+
+.chapter-card {
+  position: sticky;
+  top: 26vh;
+  box-sizing: border-box;
+  width: min(430px, calc(100vw - 2 * var(--gutter) - 40px));
+  margin-left: var(--gutter);
+  padding: 20px 22px 18px;
+  border: 1px solid var(--edge);
+  border-radius: 14px;
+  background: rgb(6 10 12 / 56%);
+  backdrop-filter: blur(8px);
+  text-shadow: var(--shadow);
+  pointer-events: auto;
+  opacity: 0.35;
+  transition: opacity 0.5s var(--ease);
+}
+
+html[data-chapter="chapter-aerial"] #chapter-aerial .chapter-card,
+html[data-chapter="chapter-request"] #chapter-request .chapter-card,
+html[data-chapter="chapter-hops"] #chapter-hops .chapter-card,
+html[data-chapter="chapter-storm"] #chapter-storm .chapter-card,
+html[data-chapter="chapter-failure"] #chapter-failure .chapter-card,
+html[data-chapter="live"] #live .chapter-card {
+  opacity: 1;
+}
+
+/* The live card greets, then scrolls away: the live view needs the whole screen. */
+#live .chapter-card {
+  position: relative;
+  top: auto;
+  margin-top: 26vh;
+}
+
+.chapter-card h2 {
+  margin: 0 0 8px;
+  font: 500 clamp(28px, 3.4vw, 40px) / 1.05 var(--serif);
+}
+
+.chapter-card p {
+  margin: 0;
+  font: 500 18px/1.4 var(--serif);
+  color: var(--fg-dim);
+}
+
+.chapter-card p + p {
+  margin-top: 10px;
+}
+
+.chapter-card .chapter-eyebrow {
+  margin: 0 0 10px;
+  font: 500 10px/1 var(--mono);
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--lantern);
+}
+
+.chapter-card .chapter-scroll {
+  font: 500 11px/1 var(--mono);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.route-first,
+.route-list,
+.route-last {
+  color: var(--fg);
+}
+
+/* Visible when focused: the first Tab stop jumps straight to the live view. */
+.skip-link {
+  position: fixed;
+  top: 64px;
+  left: var(--gutter);
+  z-index: 4;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: var(--panel-solid);
+  color: var(--fg);
+  font: 500 12px/1 var(--mono);
+  pointer-events: auto;
+  translate: 0 -200px;
+}
+
+.skip-link:focus-visible {
+  translate: 0 0;
+}
+
+#chapter-nav {
+  position: fixed;
+  right: var(--gutter);
+  top: 50%;
+  translate: 0 -50%;
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+#chapter-nav a {
+  display: flex;
+  flex-direction: row-reverse;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 0;
+  color: var(--fg-dim);
+  text-decoration: none;
+  font: 500 10px/1 var(--mono);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  text-shadow: var(--shadow);
+}
+
+#chapter-nav .nav-label {
+  opacity: 0;
+  transition: opacity 0.3s var(--ease);
+}
+
+#chapter-nav a:hover .nav-label,
+#chapter-nav a:focus-visible .nav-label,
+#chapter-nav a[aria-current] .nav-label {
+  opacity: 1;
+}
+
+#chapter-nav .nav-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  border: 1px solid var(--edge-strong);
+  background: rgb(6 10 12 / 50%);
+  flex: none;
+}
+
+#chapter-nav a[aria-current] .nav-dot {
+  background: var(--lantern);
+  border-color: var(--lantern);
+  box-shadow: 0 0 8px var(--lantern);
+}
+
+#chapter-nav a:focus-visible {
+  outline: 1px solid var(--lantern);
+  outline-offset: 4px;
+  border-radius: 4px;
+}
+
+/* During the film the chapter cards speak; the place panel and hints return for the live view. */
+html[data-film="1"] #place,
+html[data-film="1"] #hud-hints {
+  visibility: hidden;
+}
+
 /* ---------- phones ---------- */
 @media (max-width: 640px) {
   #hud-top {
@@ -749,6 +953,29 @@ kbd {
 
   #hud-legend {
     width: min(270px, calc(100vw - 32px));
+  }
+
+  /* Below the islands, above the legend row: phones frame the scene in the upper half. */
+  .chapter-card {
+    top: 50vh;
+    width: calc(100vw - 2 * var(--gutter) - 28px);
+    padding: 14px 16px;
+  }
+
+  #live .chapter-card {
+    margin-top: 50vh;
+  }
+
+  .chapter-card p {
+    font-size: 16px;
+  }
+
+  #chapter-nav {
+    right: 6px;
+  }
+
+  #chapter-nav .nav-label {
+    display: none;
   }
 
   /* The card docks above the place panel instead of floating next to the island. */

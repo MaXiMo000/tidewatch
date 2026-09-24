@@ -92,14 +92,32 @@ backend serves both during a deprecation window.
 | `scene/islands.ts` | Islets + kind-specific structures, per-island health animation (amber pulse, red flicker), one instanced glow batch; "pbr" (Cinematic) or "flat" (Balanced/Simple, one merged mesh per islet) |
 | `scene/boats.ts` | Requests as GPU-animated boats on every channel (count follows rps); Cinematic adds wakes |
 | `scene/silhouette.ts`, `glows.ts`, `random.ts` | Kind -> structure + label heights; instanced billboards; seeded PRNG |
+| `scene/story.ts` | The scroll film as pure functions of progress p: chapters, the request's route (from the live topology), its position, the camera shot; reduced-motion stills |
+| `scene/beacon.ts` | The film's hero request: one warm light (2 draw calls), attached to the active render path |
+| `hud/story.ts` | Film DOM: scroll progress, current chapter (`html[data-chapter]`, rail `aria-current`), route names in the chapter text |
 | `debug/overlay.ts` | `?debug=1` fps / CPU ms / draw calls / triangles - dev builds only |
 
-Planned (M2+):
+### The scroll film (M2)
+- **Native scroll, no scroll library.** The page is tall (`#story`: six chapter `<section>`s sized so
+  an anchor jump lands on the storyboard's p); the canvas and HUD are fixed. Chapters are plain
+  anchors (`#chapter-hops`, `#live`): keyboard, back button, deep links and screen readers work, and
+  nothing hijacks the wheel or iOS momentum. `scroll-behavior: smooth` only without reduced motion.
+- **Read once per frame.** The render loop reads `scrollY` (the range is cached on resize) and
+  eases its own copy of p (~0.15 s), so wheel steps glide. No scroll listeners do work.
+- **Camera:** `storyPose(p)` gives the shot (aerial drift -> tracking shot on the request -> the
+  slow island -> wide), continuous in p; `rig.applyStory()` blends it into the live camera from
+  p 0.86 to 0.97. Balanced/Simple roam freely (open water); **Cinematic** passes its composed view
+  as an anchor, so every shot stays inside the channel its forest keeps clear (unit-tested).
+- **Reduced motion:** p snaps to one still per chapter, so the camera cuts between stills and
+  never glides; the aerial does not drift.
+- **Route:** the longest path from the gateway (max 5 islands, ending at a database if possible):
+  `gateway -> api -> queue -> worker -> db` in the demo, `internet -> app -> db` in live mode.
+
+Planned (M3+):
 
 ```
 src/
   scene/     particles.ts  weather.ts
-  story/     timeline.ts (GSAP master)  camera-path.ts  chapters.ts  overlays.ts
   live/      freefly.ts  panel.ts  feed.ts  fallback2d.ts
   audio/     ambience.ts (optional, off by default)
 ```

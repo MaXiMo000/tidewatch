@@ -104,6 +104,12 @@ class CinematicPath implements RenderPath {
     void tier; // only one tier uses this path
   }
 
+  private attached: THREE.Object3D | null = null;
+  attach(object: THREE.Object3D): void {
+    this.attached = object;
+    this.scene.add(object);
+  }
+
   private reducedMotion = false;
   setReducedMotion(reduced: boolean): void {
     this.reducedMotion = reduced;
@@ -148,7 +154,7 @@ class CinematicPath implements RenderPath {
     // The sky darkens with the failing share and lights up with each lightning strike.
     this.sky.tick(t, Math.min(1, this.model.storm * 1.8), camera, this.drama.flash);
     this.sun.intensity = 2.2 * (1 - this.model.storm * 0.6) + this.drama.flash * 2.5;
-    this.post.setLook(this.drama.flash, camera.position.distanceTo(view.target), this.reducedMotion);
+    this.post.setLook(this.drama.flash, view.focus, this.reducedMotion);
     this.water.tick(t, camera);
     this.post.updateFog(this.model.latency, this.sunDir, t, camera);
     this.fog.color.copy(this.post.fogColor);
@@ -177,6 +183,8 @@ class CinematicPath implements RenderPath {
   }
 
   dispose(): void {
+    // A shared object (the film's beacon) belongs to main.ts, not to this path.
+    if (this.attached?.parent === this.scene) this.scene.remove(this.attached);
     this.renderer.shadowMap.enabled = false;
     this.boats.dispose();
     this.wakes.dispose();

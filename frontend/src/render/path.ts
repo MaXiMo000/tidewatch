@@ -19,6 +19,8 @@ export interface ViewBase {
   target: THREE.Vector3;
   /** tan(horizontal FOV / 2): how fast the visible width grows with depth (portrait is narrow). */
   spread: number;
+  /** Distance from the camera to what it is actually looking at this frame (depth-of-field focus). */
+  focus: number;
 }
 
 export interface RenderPath {
@@ -29,6 +31,8 @@ export interface RenderPath {
    */
   readonly shot: { elevation: number; distance: number; targetY: number; sweep: number };
   applyTier(tier: Tier): void;
+  /** Add a shared object (the film's request beacon) to this path's scene; moves it from any other. */
+  attach(object: THREE.Object3D): void;
   setReducedMotion(reduced: boolean): void;
   resize(width: number, height: number): void;
   /** Update from the model and draw one frame to the screen. */

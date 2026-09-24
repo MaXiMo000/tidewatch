@@ -3,34 +3,29 @@
 Audience: Claude Code (or any engineer) picking this project up cold. Read this file, then
 `CLAUDE.md`, then the milestone you are working on in `docs/PLAN.md`.
 
-## 0. Current state: M5 live data done, PR #16 in review (branch `m5-live`)
+## 0. Current state: M5 merged (PR #16); M2 scroll film in review (branch `m2-scroll-movie`)
 
-M0, M1 and the art pass (PR #15) are merged. M5 (real data before M2, owner decision) is
-implemented on `m5-live` / PR #16 following **`docs/M5-LIVE-PLAN.md`** s.4, steps 1-9 all done:
+**M5 live data is merged** (PR #16): metrics add-ons in AniNest/Quiz-App/LabLedger (`addons/`),
+`LiveSource`, offline islands, Render deployment files, owner risk acceptance in SECURITY.md.
+The owner's remaining part is the Render steps in `docs/M5-LIVE-PLAN.md` s.5 (tokens, env vars,
+Blueprint). LabLedger and Quiz-App show **offline** until they are redeployed next month.
 
-- **Backend**: `offline` status + `GET /api/v1/info` (schemas.py and protocol.ts in sync); live
-  config (`TIDEWATCH_LIVE_SOURCES`, `_SOURCE_TOKENS`, `_LIVE_PUBLIC`, `_LIVE_POLL_SECONDS`,
-  `_LIVE_ALLOW_PRIVATE`); `app/live.py` `LiveSource` (SSRF-checked, polls only while watched,
-  strict payload model, mapping to Snapshot; third-party `service` deps judged by errors only).
-- **Frontend**: offline islands on every tier, "n offline" summary, legend row, live caption and
-  display names from `/api/v1/info`.
-- **Deploy**: `render.yaml` + `deploy/render/` (one free Docker service, Caddy on `$PORT` +
-  uvicorn on loopback, client-IP handling), `scripts/smoke_render.py` in CI.
-- **Apps** (pushed to their default branches, CI green, inert until the token env var is set):
-  AniNest `master` d851dc3 (db = libSQL, anime-api = Jikan/AniList), Quiz-App `main` 59682c4
-  (db = MongoDB command monitoring, cache = Redis via cacheService, ai = Gemini), LabLedger `main`
-  0e65795 (db = pymongo CommandListener, queue = arq enqueue, ai = Gemini). Canonical add-ons:
-  `addons/`.
-- **Verified end to end locally** with real AniNest data: `docs/screenshots/m5/`.
-- **Docs**: SECURITY.md (owner risk acceptance s.8, T5/T6/T15/T16/T24/T25), ARCHITECTURE s.3/s.6/s.7,
-  PLAN M5, `.env.example`.
+**M2 scroll film** (this branch; design in ARCHITECTURE s.4 "The scroll film"):
+- `scene/story.ts` (pure, 15 unit tests: chapters, route planning, request path, continuity of the
+  camera, Cinematic's clear-channel constraint), `scene/beacon.ts` (the hero request),
+  `hud/story.ts` (chapter markers, route names), camera `applyStory()` blend into the live rig.
+- Six chapter cards + rail + skip link in `index.html` (plain anchors: `/#live`, `/#chapter-hops`).
+- Reduced motion: one still per chapter (cuts). Phones: native scroll, re-laid-out cards.
+- E2E: 5 new tests (chapters/rail/route text, keyboard skip + rail, `/#live`, reduced-motion stills,
+  phone overflow). `gsap` + `lenis` removed (never used; native scroll instead - PLAN M2 deviation).
+- Screenshots: `docs/screenshots/m2/` (Balanced aerial/hops/live, Cinematic request/hops, phone).
+- Perf: scrolling costs the same as idle on Low (4.7 vs 5.4 ms/frame, headless SwiftShader); a
+  mid-scroll shader-compile stall (beacon's first draw) was found with the profiler and fixed.
 
-**Next:** the owner reviews/merges PR #16 and does the Render steps in `docs/M5-LIVE-PLAN.md` s.5
-(tokens, env vars, Blueprint). LabLedger and Quiz-App show **offline** until they are redeployed
-next month with their token set - expected, not a bug. Then M2.
+Not verified: iOS Safari, Android Chrome, desktop Firefox; real low-end hardware; fps on real GPUs.
+Next after M2: **M3** (chapters 4-5 weather driven by data: instanced request particles, storm,
+failure flash/sinking), then M4, M6.
 
-Not verified: a real Render deploy (needs the owner's account); the apps' deployed endpoints
-(deliberately never contacted); fps of the live view on real GPUs (screenshots used SwiftShader).
 Rules unchanged: app repos may have **uncommitted local work that is not ours - never stage,
 stash, reset or discard it**; don't curl the apps' live URLs without asking.
 
@@ -51,7 +46,7 @@ stash, reset or discard it**; don't curl the apps' live URLs without asking.
   suite ran against `mongo:7` and Quiz-App's `mongodb-memory-server` used the image's `mongod`
   (`MONGOMS_SYSTEM_BINARY`) because the sandbox blocks fastdl.mongodb.org.
 
-## 1. Where things stand (M0, M1, art pass merged; M5 live data in PR #16; then M2)
+## 1. Where things stand (M0, M1, art pass, M5 merged; M2 in review; then M3)
 
 ### Built
 - **Backend** (`backend/app/`): config validation, strict schemas, security primitives,

@@ -64,6 +64,12 @@ export class StylisedPath implements RenderPath {
     this.reducedMotion = reduced;
   }
 
+  private attached: THREE.Object3D | null = null;
+  attach(object: THREE.Object3D): void {
+    this.attached = object;
+    this.scene.add(object);
+  }
+
   applyTier(tier: Tier): void {
     const t = TIER_SETTINGS[tier];
     this.water.setDetail(t.waterDetail);
@@ -86,7 +92,8 @@ export class StylisedPath implements RenderPath {
     this.boats.tick(t);
     this.channels.update();
     // Outside the orbit radius (camera distance ~ radius / tan(fov/2)), so trees never block islands.
-    const orbit = camera.position.distanceTo(view.target);
+    // From the composition anchor, not the moving camera: the film's shots must not replant them.
+    const orbit = view.eye.distanceTo(view.target);
     this.trees.update(this.model, orbit, this.treeCount);
     this.water.tick(this.reducedMotion ? seconds * 0.25 : seconds, camera);
     this.sky.tick(seconds, camera);
@@ -104,6 +111,8 @@ export class StylisedPath implements RenderPath {
     this.boats.dispose();
     this.channels.dispose();
     this.trees.dispose();
+    // A shared object (the film's beacon) belongs to main.ts: never dispose it here.
+    if (this.attached?.parent === this.scene) this.scene.remove(this.attached);
     this.scene.traverse((o) => {
       if (o instanceof THREE.Mesh) {
         o.geometry.dispose();

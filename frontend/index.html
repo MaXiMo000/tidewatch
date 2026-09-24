@@ -11,9 +11,67 @@
     <!-- No inline scripts or styles anywhere: the production CSP is script-src 'self'; style-src 'self'. -->
   </head>
   <body>
+    <a class="skip-link" href="#live">Skip the story</a>
     <canvas id="scene" aria-hidden="true"></canvas>
     <div id="vignette" aria-hidden="true"></div>
     <div id="island-labels" aria-label="Islands"></div>
+
+    <!-- The scroll film (docs/PLAN.md s.3). Plain anchors: every chapter is a link target, so the
+         film works with the keyboard, the back button, and without any scroll hijacking. -->
+    <div id="story">
+      <section id="chapter-aerial" class="chapter" aria-labelledby="chapter-aerial-title">
+        <div class="chapter-card">
+          <p class="chapter-eyebrow">Chapter 1 · The archipelago</p>
+          <h2 id="chapter-aerial-title">Every island is a service</h2>
+          <p>Size is traffic, colour is health, mist is latency. Scroll to follow one request through it.</p>
+          <p class="chapter-scroll" aria-hidden="true">Scroll ↓</p>
+        </div>
+      </section>
+      <section id="chapter-request" class="chapter" aria-labelledby="chapter-request-title">
+        <div class="chapter-card">
+          <p class="chapter-eyebrow">Chapter 2 · The request</p>
+          <h2 id="chapter-request-title">A light on the water</h2>
+          <p>Somebody somewhere taps a button. Their request crosses the open water and arrives at <span class="route-first">the gateway</span>, the lighthouse every request passes.</p>
+        </div>
+      </section>
+      <section id="chapter-hops" class="chapter" aria-labelledby="chapter-hops-title">
+        <div class="chapter-card">
+          <p class="chapter-eyebrow">Chapter 3 · Service hops</p>
+          <h2 id="chapter-hops-title">Island to island</h2>
+          <p>Answering it takes several services, one after another: <span class="route-list">each hop in turn</span>. Every channel it sails is a dependency, and every one adds a little time.</p>
+        </div>
+      </section>
+      <section id="chapter-storm" class="chapter" aria-labelledby="chapter-storm-title">
+        <div class="chapter-card">
+          <p class="chapter-eyebrow">Chapter 4 · The storm</p>
+          <h2 id="chapter-storm-title">When one service slows</h2>
+          <p>If <span class="route-last">the last stop</span> slows down, mist gathers over it and the boats queue up behind. Everything upstream waits for the slowest island.</p>
+        </div>
+      </section>
+      <section id="chapter-failure" class="chapter" aria-labelledby="chapter-failure-title">
+        <div class="chapter-card">
+          <p class="chapter-eyebrow">Chapter 5 · The failure</p>
+          <h2 id="chapter-failure-title">Red on the water</h2>
+          <p>When requests start failing the island turns red and the weather spreads. Then it clears: most incidents end in recovery, and the map shows that too.</p>
+        </div>
+      </section>
+      <section id="live" class="chapter chapter-live" aria-labelledby="live-title">
+        <div class="chapter-card">
+          <p class="chapter-eyebrow">Live</p>
+          <h2 id="live-title">Now it is yours</h2>
+          <p>This is the real stream. Hover or tap an island for its numbers, press <kbd>Tab</kbd> to visit each one, or scroll up to replay the story.</p>
+        </div>
+      </section>
+    </div>
+
+    <nav id="chapter-nav" aria-label="Chapters">
+      <a href="#chapter-aerial"><span class="nav-dot" aria-hidden="true"></span><span class="nav-label">1 · Archipelago</span></a>
+      <a href="#chapter-request"><span class="nav-dot" aria-hidden="true"></span><span class="nav-label">2 · Request</span></a>
+      <a href="#chapter-hops"><span class="nav-dot" aria-hidden="true"></span><span class="nav-label">3 · Hops</span></a>
+      <a href="#chapter-storm"><span class="nav-dot" aria-hidden="true"></span><span class="nav-label">4 · Storm</span></a>
+      <a href="#chapter-failure"><span class="nav-dot" aria-hidden="true"></span><span class="nav-label">5 · Failure</span></a>
+      <a href="#live"><span class="nav-dot" aria-hidden="true"></span><span class="nav-label">6 · Live</span></a>
+    </nav>
 
     <main id="hud">
       <header id="hud-top">

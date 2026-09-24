@@ -197,3 +197,109 @@ test("without reduced motion the camera orbits", async ({ page }) => {
   const before = await heading.textContent();
   await expect.poll(() => heading.textContent(), { timeout: 10_000 }).not.toBe(before);
 });
+
+// ---------- the scroll film (M2) ----------
+
+async function scrollToProgress(page: Page, p: number): Promise<void> {
+  await page.evaluate((q) => {
+    const max = document.documentElement.scrollHeight - window.innerHeight;
+    window.scrollTo({ top: q * max, behavior: "instant" });
+  }, p);
+}
+
+test("scrolling plays the chapters: rail, chapter marker and the route named in the text", async ({
+  page,
+}) => {
+  const found = await watch(page);
+  await page.goto("/?quality=medium");
+  await expect(page.locator("html")).toHaveAttribute("data-ready", "1", { timeout: 30_000 });
+  await expect(page.locator("html")).toHaveAttribute("data-chapter", "chapter-aerial");
+  await expect(page.locator("html")).toHaveAttribute("data-film", "1");
+  // The demo route, from the live topology.
+  await expect(page.locator(".route-list")).toHaveText("Gateway → API → Queue → Worker → DB");
+  for (const [p, id] of [
+    [0.2, "chapter-request"],
+    [0.42, "chapter-hops"],
+    [0.66, "chapter-storm"],
+    [0.84, "chapter-failure"],
+    [1, "live"],
+  ] as const) {
+    await scrollToProgress(page, p);
+    await expect(page.locator("html")).toHaveAttribute("data-chapter", id);
+    await expect(page.locator(`#chapter-nav a[href="#${id}"]`)).toHaveAttribute("aria-current", "step");
+    await expect(page.locator("#chapter-nav a[aria-current]")).toHaveCount(1);
+  }
+  await expect(page.locator("html")).toHaveAttribute("data-film", "0");
+  await expect(page.locator("#place")).toBeVisible();
+  expect(found.csp).toEqual([]);
+  expect(found.errors).toEqual([]);
+});
+
+test("keyboard: the first Tab stop skips the story, the rail jumps to any chapter", async ({ page }) => {
+  await page.goto("/?quality=medium");
+  await expect(page.locator("html")).toHaveAttribute("data-chapter", "chapter-aerial", { timeout: 15_000 });
+  await page.keyboard.press("Tab");
+  const skip = page.locator(".skip-link");
+  await expect(skip).toBeFocused();
+  await expect(skip).toBeInViewport();
+  await page.keyboard.press("Enter");
+  await expect(page.locator("html")).toHaveAttribute("data-chapter", "live", { timeout: 10_000 });
+  const hops = page.locator('#chapter-nav a[href="#chapter-hops"]');
+  await hops.focus();
+  await page.keyboard.press("Enter");
+  await expect(page.locator("html")).toHaveAttribute("data-chapter", "chapter-hops", { timeout: 10_000 });
+  await expect(hops).toHaveAttribute("aria-current", "step");
+});
+
+test("a chapter link is a real URL: /#live opens the live view", async ({ page }) => {
+  await page.goto("/?quality=medium#live");
+  await expect(page.locator("html")).toHaveAttribute("data-chapter", "live", { timeout: 15_000 });
+  await expect(page.locator("html")).toHaveAttribute("data-film", "0");
+});
+
+test("reduced motion: one still per chapter - scrolling inside a chapter never moves the camera", async ({
+  page,
+}) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.goto("/?quality=medium");
+  await expect(page.locator("html")).toHaveAttribute("data-ready", "1", { timeout: 30_000 });
+  // Where every island label sits on screen: a fingerprint of the whole camera pose. The islands
+  // still bob a pixel or so under reduced motion, so "moved" means more than a few pixels.
+  const shot = (): Promise<number[]> =>
+    page.evaluate(() =>
+      [...document.querySelectorAll<HTMLElement>(".island-label")].flatMap((el) => {
+        const r = el.getBoundingClientRect();
+        return [r.x, r.y];
+      }),
+    );
+  const moved = (a: number[], b: number[]): number =>
+    Math.max(...a.map((v, i) => Math.abs(v - (b[i] ?? Infinity))));
+  await scrollToProgress(page, 0.33);
+  await expect(page.locator("html")).toHaveAttribute("data-chapter", "chapter-hops");
+  await page.waitForTimeout(500);
+  const early = await shot();
+  await scrollToProgress(page, 0.52);
+  await page.waitForTimeout(1_000);
+  expect(moved(await shot(), early)).toBeLessThan(4);
+  // A different chapter is a different still (a cut).
+  await scrollToProgress(page, 0.95);
+  await expect(page.locator("html")).toHaveAttribute("data-chapter", "live");
+  await expect.poll(async () => moved(await shot(), early), { timeout: 5_000 }).toBeGreaterThan(40);
+});
+
+test.describe("phones", () => {
+  test.use({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+
+  test("the film scrolls vertically with no horizontal overflow", async ({ page }) => {
+    await page.goto("/?quality=low");
+    await expect(page.locator("html")).toHaveAttribute("data-chapter", "chapter-aerial", { timeout: 15_000 });
+    const widths = await page.evaluate(() => ({
+      scroll: document.documentElement.scrollWidth,
+      client: document.documentElement.clientWidth,
+    }));
+    expect(widths.scroll).toBeLessThanOrEqual(widths.client);
+    await scrollToProgress(page, 0.42);
+    await expect(page.locator("html")).toHaveAttribute("data-chapter", "chapter-hops");
+    await expect(page.locator("#chapter-hops .chapter-card")).toBeInViewport();
+  });
+});
