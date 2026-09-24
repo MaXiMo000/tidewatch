@@ -3,14 +3,14 @@
 Audience: Claude Code (or any engineer) picking this project up cold. Read this file, then
 `CLAUDE.md`, then the milestone you are working on in `docs/PLAN.md`.
 
-## 0. Current state: M5 merged (PR #16); M2 (#20), M3 (#21), M4 (#22), M6 (stacked) in review
+## 0. Current state: M2-M6 merged (#16, #20-#23); island batching (#24) in review; then v0.1.0
 
 **M5 live data is merged** (PR #16): metrics add-ons in AniNest/Quiz-App/LabLedger (`addons/`),
 `LiveSource`, offline islands, Render deployment files, owner risk acceptance in SECURITY.md.
 The owner's remaining part is the Render steps in `docs/M5-LIVE-PLAN.md` s.5 (tokens, env vars,
 Blueprint). LabLedger and Quiz-App show **offline** until they are redeployed next month.
 
-**M2 scroll film** (this branch; design in ARCHITECTURE s.4 "The scroll film"):
+**M2 scroll film** (merged, #20; design in ARCHITECTURE s.4 "The scroll film"):
 - `scene/story.ts` (pure, 15 unit tests: chapters, route planning, request path, continuity of the
   camera, Cinematic's clear-channel constraint), `scene/beacon.ts` (the hero request),
   `hud/story.ts` (chapter markers, route names), camera `applyStory()` blend into the live rig.
