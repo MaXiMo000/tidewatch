@@ -3,7 +3,42 @@
 Audience: Claude Code (or any engineer) picking this project up cold. Read this file, then
 `CLAUDE.md`, then the milestone you are working on in `docs/PLAN.md`.
 
-## 1. Where things stand (M1 merged; art pass Rounds 1-4 in review (PR #15) - then M2)
+## 0. Next up: M5 live data (branch `m5-live`) - start here
+
+M0, M1 and the art pass (PR #15) are **merged**; `main` is green. The owner asked for **real data
+before M2**. Every owner decision, the full design, the ordered task list with acceptance criteria
+and the owner's own to-do list are in **`docs/M5-LIVE-PLAN.md`** - read it completely. Summary:
+
+- Watch the owner's apps **AniNest**, **LabLedger**, **Quiz-App** (local clones next to this repo
+  in `C:\Users\ADMIN\Documents\Personal\`). LabLedger and Quiz-App are down until next month: they
+  must render as **offline** islands, which is expected, not a bug.
+- No Prometheus. Each app gets a tiny vendored metrics add-on serving aggregates at
+  `GET /tidewatch/metrics` (Bearer token); Tidewatch's new `LiveSource` polls them only while
+  someone is watching.
+- **Public, aggregates only** (owner risk acceptance, to be recorded in SECURITY.md).
+- Host on **Render free** (one Docker service: Caddy on `$PORT` + uvicorn, `render.yaml`).
+- App repo changes are **pushed directly to their default branch** (owner's choice). Those repos
+  have **uncommitted local work that is not ours - never stage, stash, reset or discard it.**
+- Don't curl the apps' live URLs without asking (owner declined once).
+
+State of `m5-live`: this handoff commit only; no M5 code yet. Nothing in the three app repos has
+been changed.
+
+### Session environment notes (Windows 11 laptop, Intel UHD)
+- Shells: PowerShell (primary) and Git Bash. Python venv at `backend/.venv/Scripts/python.exe`.
+- gitleaks before every commit:
+  `/c/Users/ADMIN/tools/gitleaks/gitleaks.exe git --pre-commit --staged --no-banner --redact .`
+- Dev servers in the desktop app: `preview_start` names `tidewatch-backend` (uvicorn :8000) and
+  `tidewatch-frontend` (Vite, port 5174) from `C:\Users\ADMIN\Documents\Personal\.claude\launch.json`
+  (the parent folder, not this repo).
+- Docker Desktop works (compose stack + `lock-backend.sh`). `gh` is authenticated as MaXiMo000.
+- `main` is protected: squash-only, 6 required checks (backend, frontend, compose, gitleaks,
+  analyze (python), analyze (javascript-typescript)). Work on a branch, open a PR.
+- Commit trailer: `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`; PR body ends with
+  `🤖 Generated with [Claude Code](https://claude.com/claude-code)`.
+- Open Dependabot PRs for Python 3.14 and TypeScript 7 are **owner decisions** - leave them.
+
+## 1. Where things stand (M0, M1, art pass merged - M5 live data next, then M2)
 
 ### Built
 - **Backend** (`backend/app/`): config validation, strict schemas, security primitives,
@@ -21,7 +56,11 @@ Audience: Claude Code (or any engineer) picking this project up cold. Read this 
   CI (backend, frontend, compose smoke test, gitleaks, CodeQL) with SHA-pinned actions (enforced by
   the repo setting), Dependabot (pip, npm, actions, docker, docker-compose).
 
-### Art pass (before M2) - Rounds 1-4 done, awaiting owner review (PR #15)
+### Art pass (before M2) - Rounds 1-4 done, merged (PR #15)
+Tiers are now named Cinematic / Balanced / Simple (URL `?quality=high|medium|low`). Cinematic is a
+lazy chunk (`src/cinematic/`), Balanced/Simple share `src/render/stylised.ts`; both read the one
+`WorldModel`. HUD: `src/hud/` (inspector with picking, quality menu, legend, Q/L/Esc keys).
+Tests now: 33 vitest, 10 Playwright.
 Screenshots + critique logs per round: `docs/screenshots/round-{1,2,3,4}/`.
 
 | Tier | Draw calls | Triangles | GPU mem (est.) | CPU ms/frame | Download beyond initial |
@@ -108,13 +147,13 @@ cd ../frontend && E2E_BASE_URL=https://localhost E2E_CHANNEL=chrome npm run e2e 
 
 ## 3. Suggested prompt for Claude Code
 
-> Read `CLAUDE.md`, `docs/HANDOVER.md`, `docs/PLAN.md` and `docs/SECURITY.md`. Complete Milestone M0
-> exactly as described in HANDOVER section 2: get every backend and frontend check green without
-> weakening any security control, commit `package-lock.json`, get CI green, and get the compose stack
-> serving the placeholder scene over HTTPS. Report anything in the "NOT verified" table that turned
-> out to be wrong. Then update the "Where things stand" section of `docs/HANDOVER.md` and stop for review.
+> Read `CLAUDE.md`, `docs/HANDOVER.md` (section 0 first), `docs/M5-LIVE-PLAN.md`, `docs/SECURITY.md`
+> and `docs/ARCHITECTURE.md` in `C:\Users\ADMIN\Documents\Personal\tidewatch`. Continue on branch
+> `m5-live` and implement M5 live data following `docs/M5-LIVE-PLAN.md` section 4 in order. Owner
+> decisions there are final - don't re-ask them. Same rules as always, one commit per step, CI green.
+> Finish with the Tidewatch PR and the owner's step list, then stop for review.
 
-Subsequent prompts: "Complete Milestone M1", "M2", ... each with the same rules.
+After M5: "Complete Milestone M2", then M3, M4, M6, with the same rules each time.
 
 ## 4. Publishing and GitHub settings
 
@@ -136,8 +175,8 @@ branch protection on `main` requiring all six CI checks, squash-only linear hist
 ## 6. Glossary
 
 - **Snapshot** - one tick of all service metrics and edges (`schemas.Snapshot`).
-- **Source** - producer of snapshots (`DemoSource`, later Prometheus/OTel adapters).
+- **Source** - producer of snapshots (`DemoSource`; M5 adds `LiveSource`, polling the apps' metrics add-ons).
 - **Hub** - fan-out from one source to many bounded per-client queues.
 - **Ticket** - single-use, 30 s token that authorises one WebSocket connection.
 - **Story mode / live mode** - scripted scroll movie vs. real-data free-fly view.
-- **Tier** - quality preset (High/Medium/Low) chosen by GPU detection and the FPS governor.
+- **Tier** - quality preset (Cinematic/Balanced/Simple, internally high/medium/low) chosen by GPU detection and the FPS governor.
