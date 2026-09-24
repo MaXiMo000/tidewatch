@@ -8,9 +8,12 @@ import "./style.css";
 import { MetricsClient } from "./net/client";
 import { store } from "./state/store";
 
-const canvas = document.querySelector<HTMLCanvasElement>("#scene");
-const status = document.querySelector<HTMLElement>("#hud-status");
-if (!canvas || !status) throw new Error("required DOM nodes are missing");
+const canvasEl = document.querySelector<HTMLCanvasElement>("#scene");
+const statusEl = document.querySelector<HTMLElement>("#hud-status");
+if (!canvasEl || !statusEl) throw new Error("required DOM nodes are missing");
+// Re-bind as non-null consts: TS does not carry the narrowing above into closures.
+const canvas: HTMLCanvasElement = canvasEl;
+const status: HTMLElement = statusEl;
 
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: "low-power" });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5)); // biggest low-end win
@@ -32,7 +35,7 @@ const geometry = new THREE.BoxGeometry(1.6, 1, 1.6);
 const islands = new Map<string, THREE.Mesh<THREE.BoxGeometry, THREE.MeshStandardMaterial>>();
 
 function resize(): void {
-  const { clientWidth: w, clientHeight: h } = canvas as HTMLCanvasElement;
+  const { clientWidth: w, clientHeight: h } = canvas;
   renderer.setSize(w, h, false);
   camera.aspect = w / Math.max(h, 1);
   camera.updateProjectionMatrix();

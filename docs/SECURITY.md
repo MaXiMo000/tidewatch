@@ -45,15 +45,15 @@ Everything crossing 1 and 3 is untrusted input and is validated.
 | T9 | DoS via connections | Global and per-IP WS caps; auth timeout (5 s); message size cap; per-connection message rate cap | `security.py`, `main.py` | done |
 | T10 | DoS via slow clients / memory growth | Bounded per-client queue (2), drop-oldest; single producer | `hub.py` | done |
 | T11 | Volumetric DDoS | Out of scope for the app: use a CDN/WAF/provider protection in front | deploy | documented |
-| T12 | Host-header attacks / DNS rebinding | `TrustedHostMiddleware` with exact hosts; wildcards rejected at startup | `main.py`, `config.py` | done |
-| T13 | Clickjacking | `frame-ancestors 'none'` (API + frontend CSP) | `security.py`, Caddyfile | done |
+| T12 | Host-header attacks / DNS rebinding | `TrustedHostMiddleware` with exact hosts; wildcards (`*`, `*.x`) and non-exact origins rejected at startup | `main.py`, `config.py` | done |
+| T13 | Clickjacking | `frame-ancestors 'none'` (API + frontend CSP; Caddy sets the frontend CSP on static files only, so the API keeps its own) | `security.py`, Caddyfile | done (smoke-tested) |
 | T14 | MIME sniffing / caching of sensitive responses | `nosniff`; API `Cache-Control: no-store` | `security.py` | done |
 | T15 | SSRF via adapters | Config-only endpoints, IP/host validation, deny link-local/metadata/private by default, timeouts, size caps | ARCH s.6 | planned M5 |
 | T16 | Query injection into upstream | Fixed queries in code; only allowlisted ids interpolated | ARCH s.6 | planned M5 |
-| T17 | Secret committed to a public repo | `.gitignore`, `.env.example` only, pre-commit gitleaks + `detect-private-key`, CI gitleaks, GitHub secret scanning + push protection | repo, `scripts/harden-repo.sh` | done (needs harden script run) |
-| T18 | Vulnerable dependencies | Lockfiles, Dependabot, `pip-audit`, `npm audit`, CodeQL; `npm ci --ignore-scripts` | CI | configured; not yet run |
-| T19 | Malicious/compromised GitHub Action | Actions pinned to commit SHAs; `permissions: contents: read`; `persist-credentials: false` | `.github/workflows` | done |
-| T20 | Container escape / privilege abuse | Non-root user, read-only FS, `cap_drop: ALL`, `no-new-privileges`, memory/PID limits, backend not published | `deploy/`, Dockerfile | done (untested build) |
+| T17 | Secret committed to a public repo | `.gitignore`, `.env.example` only, pre-commit gitleaks + `detect-private-key`, CI gitleaks, GitHub secret scanning + push protection | repo, `scripts/harden-repo.sh` | done (harden script applied and verified) |
+| T18 | Vulnerable dependencies | Lockfiles (npm + hash-pinned `requirements.lock`), Dependabot, `pip-audit` (venv + lock), `npm audit`, CodeQL; `npm ci --ignore-scripts` | CI | done (green in CI) |
+| T19 | Malicious/compromised GitHub Action | Actions pinned to commit SHAs (enforced by the repo's `sha_pinning_required`); `permissions: contents: read`; `persist-credentials: false` | `.github/workflows`, `scripts/harden-repo.sh` | done |
+| T20 | Container escape / privilege abuse | Non-root user, read-only FS, `cap_drop: ALL`, `no-new-privileges`, memory/PID limits, backend not published, backend network `internal` (no egress) | `deploy/`, Dockerfile | done (smoke-tested locally + CI) |
 | T21 | Information disclosure via errors/docs | OpenAPI/docs disabled in prod; generic error responses; no stack traces to clients | `main.py` | done |
 | T22 | Weak production config | Startup validation: prod requires https origins and >= 32-char keys; live requires keys | `config.py` | done |
 | T23 | Tampered release artefacts | SBOM + build provenance attestation | CI | planned M6 |
@@ -91,7 +91,7 @@ weaken a check to get CI green.
 - [ ] Live mode is behind real authentication (OIDC) - **not** the API-key gate
 - [ ] Secrets scan of full git history clean; GitHub push protection enabled
 - [ ] SBOM + provenance published for the release
-- [ ] Docker base images pinned by digest; dependencies hash-pinned
+- [x] Docker base images pinned by digest; dependencies hash-pinned (M0: `python:3.12-slim@sha256`, `caddy:2@sha256`, `backend/requirements.lock`, npm lockfile integrity hashes)
 
 ## 8. Residual risks we accept (and why)
 

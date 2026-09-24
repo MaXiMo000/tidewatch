@@ -47,7 +47,9 @@ class AuthMessage(_Strict):
     """First (and only required) client message on the WebSocket."""
 
     type: Literal["auth"]
-    ticket: Annotated[str, StringConstraints(min_length=20, max_length=128, pattern=r"^[A-Za-z0-9_-]+$")]
+    ticket: Annotated[
+        str, StringConstraints(min_length=20, max_length=128, pattern=r"^[A-Za-z0-9_-]+$")
+    ]
 
 
 class TicketResponse(_Strict):

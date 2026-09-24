@@ -5,10 +5,31 @@ Never hard-code secrets, never commit a real `.env`. See docs/SECURITY.md.
 
 from __future__ import annotations
 
+import re
 from typing import Literal, Self
+from urllib.parse import urlsplit
 
 from pydantic import SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+# A bare hostname or IPv4 literal: letters, digits, dots, hyphens. No "*", ports or paths.
+_HOST_RE = re.compile(r"^[A-Za-z0-9](?:[A-Za-z0-9.-]{0,251}[A-Za-z0-9])?$")
+
+
+def _is_exact_origin(origin: str) -> bool:
+    """True for `scheme://host[:port]` exactly as a browser sends it in the Origin header."""
+    try:
+        parts = urlsplit(origin)
+        port = parts.port  # raises ValueError on a malformed port
+    except ValueError:
+        return False
+    host = parts.hostname or ""
+    rebuilt = f"{parts.scheme}://{host}" + (f":{port}" if port is not None else "")
+    return (
+        parts.scheme in ("http", "https")
+        and bool(_HOST_RE.match(host))
+        and origin == rebuilt  # no path, query, fragment, userinfo, trailing slash or uppercase
+    )
 
 
 class Settings(BaseSettings):
@@ -44,11 +65,16 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def _validate(self) -> Self:
+        # Exact values only: Starlette treats "*" and "*.example.com" as wildcards, and an origin
+        # with a path or trailing slash never matches a browser's Origin header.
         for origin in self.allowed_origins:
-            if origin == "*" or not origin.startswith(("http://", "https://")):
-                raise ValueError(f"allowed_origins must be exact http(s) origins, got {origin!r}")
-        if "*" in self.allowed_hosts:
-            raise ValueError("allowed_hosts must not contain '*'")
+            if not _is_exact_origin(origin):
+                raise ValueError(
+                    f"allowed_origins must be exact scheme://host[:port] origins, got {origin!r}"
+                )
+        for host in self.allowed_hosts:
+            if not _HOST_RE.match(host):
+                raise ValueError(f"allowed_hosts must be exact hostnames, got {host!r}")
         if self.mode == "live" and not self.api_keys:
             raise ValueError("live mode requires at least one TIDEWATCH_API_KEYS entry")
         if self.env == "prod":

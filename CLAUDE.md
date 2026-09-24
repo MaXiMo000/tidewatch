@@ -12,9 +12,13 @@ ruff check . && mypy app && bandit -q -r app -c pyproject.toml && pytest
 uvicorn app.main:get_app --factory --reload --port 8000
 
 # frontend (from frontend/)
-npm ci --ignore-scripts        # after package-lock.json exists; use `npm install` once to create it
+npm ci --ignore-scripts        # Node >= 22.12
 npm run typecheck && npm test && npm run build
 npm run dev
+
+# repo root
+./scripts/lock-backend.sh      # after changing backend runtime deps (Docker; resolves for Linux)
+# compose smoke test: see docs/HANDOVER.md section 2
 ```
 
 ## Non-negotiable security rules
@@ -22,7 +26,8 @@ npm run dev
 These protect the owner and every future user. If a task seems to conflict with one, stop and ask.
 
 1. **No secrets in the repo, ever.** No keys, tokens, real hostnames, real metrics, customer data,
-   or `.env` files. Only `.env.example` with placeholders. Run `gitleaks detect` before committing.
+   or `.env` files. Only `.env.example` with placeholders. Run gitleaks before committing
+   (`gitleaks git --pre-commit --staged`, or the pre-commit hook).
 2. **Everything sent to a browser goes through `backend/app/schemas.py`** (strict, `extra="forbid"`,
    bounded). Never forward raw upstream payloads, labels, log lines, URLs or headers.
 3. **Everything received from the network is untrusted** - frontend validates with `zod`

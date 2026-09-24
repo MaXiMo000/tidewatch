@@ -46,14 +46,16 @@ Text overlays are HTML/CSS over the canvas (cheap, sharp, accessible). Chapter m
 Each milestone is shippable and has acceptance criteria. Order matters: security and performance
 foundations come before spectacle.
 
-### M0 - Bring-up and baseline
-- Install deps, generate and commit `frontend/package-lock.json`; generate hash-pinned
+### M0 - Bring-up and baseline (done 2026-09-24, PR #1)
+- [x] Install deps, generate and commit `frontend/package-lock.json`; generate hash-pinned
   `backend/requirements.lock` (`pip-compile --generate-hashes`) and use it in the Dockerfile.
-- Run the full backend suite, `ruff`, `mypy`, `bandit`, `pip-audit`; fix first-run failures.
-- Run frontend `typecheck`, `test`, `build`; confirm the placeholder scene shows demo data end-to-end.
-- Get CI green; pin the Docker base image by digest; build and smoke-test `deploy/docker-compose.yml`.
-- **Accept:** CI green on a fresh clone; `docker compose up` serves the app over HTTPS locally;
-  `scripts/harden-repo.sh` output reviewed.
+- [x] Run the full backend suite, `ruff`, `mypy`, `bandit`, `pip-audit`; fix first-run failures.
+- [x] Run frontend `typecheck`, `test`, `build`; confirm the placeholder scene shows demo data end-to-end.
+- [x] Get CI green; pin the Docker base image by digest; build and smoke-test `deploy/docker-compose.yml`.
+- **Accept:**
+  - [x] CI green on a fresh clone (every job runs from a fresh checkout; `npm ci` from the lockfile)
+  - [x] `docker compose up` serves the app over HTTPS locally (`scripts/smoke_compose.py`, 32/32; also a CI job)
+  - [x] `scripts/harden-repo.sh` output reviewed (no FAIL; settings read back; 2 gaps closed)
 
 ### M1 - Scene foundation + quality tiers
 - Renderer setup, resize, pixel-ratio cap, `detect-gpu` initial tier + live FPS governor (High/Med/Low).

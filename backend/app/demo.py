@@ -12,10 +12,10 @@ import random
 import time
 from collections.abc import AsyncIterator
 
-from .schemas import Edge, ServiceMetrics, Snapshot, Status
+from .schemas import Edge, Kind, ServiceMetrics, Snapshot, Status
 
 # (id, kind, base_rps, base_p95_ms)
-_SERVICES = [
+_SERVICES: list[tuple[str, Kind, float, float]] = [
     ("gateway", "gateway", 420.0, 18.0),
     ("auth", "service", 260.0, 25.0),
     ("api", "service", 380.0, 60.0),
@@ -82,7 +82,7 @@ class DemoSource:
             services.append(
                 ServiceMetrics(
                     id=sid,
-                    kind=kind,  # type: ignore[arg-type]
+                    kind=kind,
                     rps=round(cur_rps, 1),
                     p95_ms=round(cur_p95, 1),
                     error_rate=round(min(err, 1.0), 4),
