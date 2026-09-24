@@ -33,6 +33,10 @@ class Hub:
     def unsubscribe(self, q: asyncio.Queue[str]) -> None:
         self._subs.discard(q)
 
+    def watchers(self) -> int:
+        """Number of connected viewers (LiveSource only polls the apps while this is > 0)."""
+        return len(self._subs)
+
     async def run(self) -> None:
         async for snap in self._source.stream():
             payload = snap.model_dump_json()

@@ -11,8 +11,11 @@ from typing import Annotated, Literal
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints
 
 ServiceId = Annotated[str, StringConstraints(pattern=r"^[a-z0-9-]{1,32}$")]
-Status = Literal["ok", "degraded", "failing"]
+# "offline": a live source could not be reached (or sent nothing valid) for a while.
+Status = Literal["ok", "degraded", "failing", "offline"]
 Kind = Literal["gateway", "service", "cache", "database", "queue", "worker"]
+# Display name of a live source, e.g. "Quiz-App". Plain text only; rendered with textContent.
+SourceName = Annotated[str, StringConstraints(pattern=r"^[A-Za-z0-9][A-Za-z0-9 ._-]{0,31}$")]
 
 
 class _Strict(BaseModel):
@@ -55,3 +58,15 @@ class AuthMessage(_Strict):
 class TicketResponse(_Strict):
     ticket: str
     expires_in: int
+
+
+class SourceInfo(_Strict):
+    id: ServiceId
+    name: SourceName
+
+
+class InfoResponse(_Strict):
+    """GET /api/v1/info: lets the HUD say what it is showing (demo vs the watched apps)."""
+
+    mode: Literal["demo", "live"]
+    sources: Annotated[list[SourceInfo], Field(max_length=16)]

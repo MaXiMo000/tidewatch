@@ -36,7 +36,7 @@ _EDGES = [
 _INCIDENT_PERIOD_S = 90.0  # every 90s the db degrades, then recovers
 
 
-def _status(p95: float, err: float) -> Status:
+def status_for(p95: float, err: float) -> Status:
     if err > 0.05 or p95 > 1500:
         return "failing"
     if err > 0.01 or p95 > 400:
@@ -86,7 +86,7 @@ class DemoSource:
                     rps=round(cur_rps, 1),
                     p95_ms=round(cur_p95, 1),
                     error_rate=round(min(err, 1.0), 4),
-                    status=_status(cur_p95, err),
+                    status=status_for(cur_p95, err),
                 )
             )
         edges = [Edge(src=s, dst=d, rps=round(rps_by_id[s] * f, 1)) for s, d, f in _EDGES]
