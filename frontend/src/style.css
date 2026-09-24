@@ -223,7 +223,10 @@ html {
 
 /* ---------- buttons & menu ---------- */
 #hud-tier,
-#hud-legend-toggle {
+#hud-legend-toggle,
+#hud-tools button,
+#photo-bar button,
+#view2d button {
   font: 500 11px/1 var(--mono);
   letter-spacing: 0.1em;
   text-transform: uppercase;
@@ -241,12 +244,17 @@ html {
 }
 
 #hud-tier:hover,
-#hud-legend-toggle:hover {
+#hud-legend-toggle:hover,
+#hud-tools button:hover,
+#photo-bar button:hover,
+#view2d button:hover {
   border-color: var(--edge-strong);
   background: var(--panel-solid);
 }
 
 #hud button:focus-visible,
+#photo-bar button:focus-visible,
+#view2d button:focus-visible,
 .island-label:focus-visible {
   outline: 2px solid var(--lantern);
   outline-offset: 2px;
@@ -700,6 +708,244 @@ kbd {
     opacity: 1;
     transform: none;
   }
+}
+
+/* ---------- live mode (M4): tools, event feed, photo mode, 2D view ---------- */
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+#hud-tools {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+#hud-tools button {
+  padding: 7px 11px;
+  min-height: 30px;
+  font-size: 10px;
+}
+
+#hud-tools button[data-suggest="1"],
+#hud-tools button[aria-pressed="true"] {
+  border-color: var(--lantern);
+}
+
+#event-feed-wrap {
+  margin-top: 10px;
+  width: min(300px, 40vw);
+  pointer-events: none;
+}
+
+#event-feed-wrap h2 {
+  margin: 0 0 6px;
+  text-align: right;
+  font: 500 10px/1 var(--mono);
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--fg-dim);
+}
+
+#event-feed {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 4px;
+  font: 400 11px/1.35 var(--mono);
+}
+
+#event-feed li {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 8px;
+  padding: 5px 9px;
+  border-radius: 8px;
+  background: rgb(6 10 12 / 58%);
+  border-left: 2px solid var(--muted);
+}
+
+#event-feed li[data-severity="bad"] {
+  border-left-color: var(--failing);
+}
+
+#event-feed li[data-severity="warn"] {
+  border-left-color: var(--degraded);
+}
+
+#event-feed li[data-severity="good"] {
+  border-left-color: var(--ok);
+}
+
+#event-feed time {
+  color: var(--muted);
+}
+
+/* The feed belongs to the live view, and only once something has happened. */
+html[data-film="1"] #event-feed-wrap,
+#event-feed-wrap:has(#event-feed:empty) {
+  display: none;
+}
+
+/* Photo mode: nothing over the scene but a small bar to save or leave. */
+#photo-bar {
+  position: fixed;
+  left: 50%;
+  bottom: max(16px, env(safe-area-inset-bottom));
+  translate: -50% 0;
+  z-index: 5;
+  display: none;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px 8px 14px;
+  border-radius: 999px;
+  background: var(--panel-solid);
+  border: 1px solid var(--edge);
+  font: 400 11px/1 var(--mono);
+  color: var(--fg-dim);
+}
+
+html[data-photo="1"] #photo-bar {
+  display: flex;
+}
+
+html[data-photo="1"] #hud,
+html[data-photo="1"] #island-labels,
+html[data-photo="1"] #story,
+html[data-photo="1"] #chapter-nav,
+html[data-photo="1"] .skip-link {
+  visibility: hidden;
+}
+
+/* The 2D view replaces the scene (and the film) with the same live data as a table. */
+#view2d {
+  display: none;
+  box-sizing: border-box;
+  max-width: 920px;
+  margin: 0 auto;
+  padding: max(20px, env(safe-area-inset-top)) var(--gutter) 40px;
+  font-family: var(--mono);
+}
+
+html[data-view="2d"] #view2d {
+  display: block;
+}
+
+html[data-view="2d"] #scene,
+html[data-view="2d"] #vignette,
+html[data-view="2d"] #island-labels,
+html[data-view="2d"] #story,
+html[data-view="2d"] #chapter-nav,
+html[data-view="2d"] #hud,
+html[data-view="2d"] #photo-bar,
+html[data-view="2d"] .skip-link {
+  display: none;
+}
+
+#view2d header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+#view2d h2 {
+  margin: 0;
+  font: 600 18px/1.2 var(--serif);
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+}
+
+#view2d-note:empty {
+  display: none;
+}
+
+#view2d-note,
+#view2d-summary {
+  margin: 14px 0 0;
+  font-size: 13px;
+  color: var(--fg-dim);
+}
+
+#view2d table {
+  width: 100%;
+  margin-top: 16px;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+#view2d caption {
+  text-align: left;
+  padding-bottom: 8px;
+  color: var(--muted);
+}
+
+#view2d th,
+#view2d td {
+  padding: 9px 10px;
+  text-align: left;
+  border-bottom: 1px solid var(--edge);
+}
+
+#view2d thead th {
+  font-weight: 500;
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--fg-dim);
+}
+
+#view2d tbody th {
+  font-weight: 500;
+}
+
+#view2d tbody tr[data-status="failing"] td:nth-child(3) {
+  color: var(--failing);
+}
+
+#view2d tbody tr[data-status="degraded"] td:nth-child(3) {
+  color: var(--degraded);
+}
+
+#view2d tbody tr[data-status="ok"] td:nth-child(3) {
+  color: var(--ok);
+}
+
+#view2d tbody tr[data-status="offline"] {
+  color: var(--muted);
+}
+
+@media (max-width: 640px) {
+  #view2d table {
+    font-size: 12px;
+  }
+
+  #view2d th,
+  #view2d td {
+    padding: 8px 6px;
+  }
+
+  /* Kind is the least useful column on a phone. */
+  #view2d th:nth-child(2),
+  #view2d td:nth-child(2) {
+    display: none;
+  }
+
+  #event-feed-wrap {
+    display: none;
+  }
+}
+
+/* Touch: one finger scrolls the film; two fingers turn/zoom the live camera (live/freefly.ts). */
+#scene {
+  touch-action: pan-y;
 }
 
 /* ---------- the scroll film (scene/story.ts) ---------- */

@@ -86,11 +86,15 @@
         </div>
 
         <div id="hud-right">
-          <p id="hud-summary" aria-live="polite"></p>
+          <p id="hud-summary"></p>
           <div id="hud-tier-wrap">
             <button id="hud-tier" type="button" aria-haspopup="menu" aria-expanded="false" aria-controls="hud-tier-menu">Quality</button>
             <div id="hud-tier-menu" role="menu" aria-label="Rendering quality" hidden></div>
           </div>
+          <section id="event-feed-wrap" aria-labelledby="event-feed-title">
+            <h2 id="event-feed-title">Recent changes</h2>
+            <ol id="event-feed"></ol>
+          </section>
         </div>
       </header>
 
@@ -103,13 +107,21 @@
         </section>
 
         <p id="hud-hints" aria-hidden="true">
+          <span><kbd>drag</kbd><kbd>WASD</kbd> fly</span>
+          <span><kbd>0</kbd> reset</span>
+          <span><kbd>P</kbd> photo</span>
           <span><kbd>Q</kbd> quality</span>
           <span><kbd>L</kbd> labels</span>
           <span><kbd>Tab</kbd> islands</span>
-          <span><kbd>Esc</kbd> close</span>
         </p>
 
         <div id="hud-legend-wrap">
+          <div id="hud-tools">
+            <button id="fly-reset" type="button" hidden>Reset view</button>
+            <button id="photo-toggle" type="button" aria-keyshortcuts="P">Photo</button>
+            <button id="sound-toggle" type="button" aria-pressed="false">Sound off</button>
+            <button id="view-toggle" type="button">2D view</button>
+          </div>
           <button id="hud-legend-toggle" type="button" aria-expanded="false" aria-controls="hud-legend">Legend</button>
           <dl id="hud-legend" hidden>
             <div><dt><span class="swatch swatch-health" aria-hidden="true"></span>Colour</dt><dd>health: teal ok, amber degraded, red failing</dd></div>
@@ -139,7 +151,31 @@
         <progress id="hud-loading-bar" max="100" value="0"></progress>
       </div>
       <p id="hud-notice" role="status" aria-live="polite"></p>
+      <!-- Spoken status: counts and the names of anything not healthy, only when it changes. -->
+      <p id="sr-status" class="visually-hidden" aria-live="polite"></p>
     </main>
+
+    <div id="photo-bar" role="toolbar" aria-label="Photo mode">
+      <span>Photo mode · drag or <kbd>WASD</kbd> to frame</span>
+      <button id="photo-save" type="button">Save image</button>
+      <button id="photo-exit" type="button">Exit</button>
+    </div>
+
+    <section id="view2d" aria-labelledby="view2d-title">
+      <header>
+        <h2 id="view2d-title"><span class="brand-mark" aria-hidden="true">≋</span> Tidewatch · 2D view</h2>
+        <button id="view2d-exit" type="button">3D view</button>
+      </header>
+      <p id="view2d-note"></p>
+      <p id="view2d-summary" aria-live="polite"></p>
+      <table>
+        <caption>Every service, worst first. Updated live.</caption>
+        <thead>
+          <tr><th scope="col">Service</th><th scope="col">Kind</th><th scope="col">Status</th><th scope="col">Requests</th><th scope="col">p95 latency</th><th scope="col">Errors</th></tr>
+        </thead>
+        <tbody id="view2d-rows"></tbody>
+      </table>
+    </section>
     <noscript>Tidewatch needs JavaScript and WebGL to render its live view.</noscript>
     <script type="module" src="/src/main.ts"></script>
   </body>

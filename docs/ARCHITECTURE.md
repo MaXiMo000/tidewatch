@@ -95,6 +95,11 @@ backend serves both during a deprecation window.
 | `scene/story.ts` | The scroll film as pure functions of progress p: chapters, the request's route (from the live topology), its position, the camera shot; reduced-motion stills |
 | `scene/weather.ts` | Balanced/Simple weather: latency fog, mist banks, storm clouds (one instanced billboard draw call), lightning light boost |
 | `scene/weather-rules.ts` | Pure data -> weather rules: fog scale, mist amount, sink share, `LightningClock` (>= 2.5 s apart), `Shake` |
+| `live/freefly.ts` | Live-view camera you steer: clamped orbit state (pure, tested), per-path limits |
+| `live/feed.ts` | Snapshot diff -> event feed (`#event-feed`) and the screen-reader status sentence (`#sr-status`) |
+| `live/photo.ts` | Photo mode: overlays hidden, canvas -> PNG download right after a rendered frame |
+| `live/fallback2d.ts` | 2D view (accessible table from snapshots) and the "3D is struggling" detector |
+| `audio/ambience.ts` | Optional Web Audio ambience, lazy chunk, off by default, no audio files |
 | `scene/beacon.ts` | The film's hero request: one warm light (2 draw calls), attached to the active render path |
 | `hud/story.ts` | Film DOM: scroll progress, current chapter (`html[data-chapter]`, rail `aria-current`), route names in the chapter text |
 | `debug/overlay.ts` | `?debug=1` fps / CPU ms / draw calls / triangles - dev builds only |
@@ -114,14 +119,6 @@ backend serves both during a deprecation window.
   never glides; the aerial does not drift.
 - **Route:** the longest path from the gateway (max 5 islands, ending at a database if possible):
   `gateway -> api -> queue -> worker -> db` in the demo, `internet -> app -> db` in live mode.
-
-Planned (M3+):
-
-```
-src/
-  live/      freefly.ts  panel.ts  feed.ts  fallback2d.ts
-  audio/     ambience.ts (optional, off by default)
-```
 
 ### Render loop rules
 - One `requestAnimationFrame` loop; skip when `document.hidden`; drop to low fps when idle.

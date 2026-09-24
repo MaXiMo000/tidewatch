@@ -38,5 +38,7 @@ export interface RenderPath {
   /** Update from the model and draw one frame to the screen. */
   frame(dtSeconds: number, seconds: number, camera: THREE.PerspectiveCamera, view: ViewBase): void;
   info(): PathInfo;
+  /** 0..1 current lightning flash (sound design, M4 ambience). */
+  weatherFlash(): number;
   dispose(): void;
 }

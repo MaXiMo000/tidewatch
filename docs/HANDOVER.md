@@ -3,7 +3,7 @@
 Audience: Claude Code (or any engineer) picking this project up cold. Read this file, then
 `CLAUDE.md`, then the milestone you are working on in `docs/PLAN.md`.
 
-## 0. Current state: M5 merged (PR #16); M2 (PR #20) and M3 (stacked on it) in review
+## 0. Current state: M5 merged (PR #16); M2 (#20), M3 (#21) and M4 (stacked) in review
 
 **M5 live data is merged** (PR #16): metrics add-ons in AniNest/Quiz-App/LabLedger (`addons/`),
 `LiveSource`, offline islands, Render deployment files, owner risk acceptance in SECURITY.md.
@@ -32,9 +32,17 @@ Blueprint). LabLedger and Quiz-App show **offline** until they are redeployed ne
 - Screenshots `docs/screenshots/m3/` (calm, degraded, failing on Balanced and Simple; storm chapter).
 - Also fixes found while testing: the live card fades once the view settles (`html[data-settled]`).
 
+**M4 live mode** (branch `m4-live-mode`, stacked on M3 - merge #20, then #21, first):
+- `live/freefly.ts` (drag / WASD / R-F / pinch, 0 resets; Cinematic limited to its channel),
+  `live/feed.ts` (event feed + `#sr-status` sentence), `live/photo.ts` (P, Save, Esc),
+  `live/fallback2d.ts` (2D table: no WebGL -> automatic, `?view=2d`, button; suggested when Simple
+  stays < 12 fps), `audio/ambience.ts` (off by default, lazy 0.9 KB chunk). 14 new unit tests,
+  6 new E2E tests (free-fly, photo PNG, sound, SR sentence, 2D view, no-WebGL fallback).
+- Initial bundle 178.1 KB gzip. No CSP change.
+
 Not verified: iOS Safari, Android Chrome, desktop Firefox; real low-end hardware; fps on real GPUs;
-sinking boats were checked for shader errors (E2E console) but not caught mid-sink on camera.
-Next: **M4** (free-fly, event feed, photo mode, 2D fallback, a11y), then M6.
+a real screen reader (NVDA/VoiceOver); sinking boats caught mid-sink on camera.
+Next: **M6** (Trusted Types, ZAP, k6, Lighthouse budget, SBOM + provenance, README, v0.1.0).
 
 Rules unchanged: app repos may have **uncommitted local work that is not ours - never stage,
 stash, reset or discard it**; don't curl the apps' live URLs without asking.
@@ -56,7 +64,7 @@ stash, reset or discard it**; don't curl the apps' live URLs without asking.
   suite ran against `mongo:7` and Quiz-App's `mongodb-memory-server` used the image's `mongod`
   (`MONGOMS_SYSTEM_BINARY`) because the sandbox blocks fastdl.mongodb.org.
 
-## 1. Where things stand (M0, M1, art pass, M5 merged; M2 + M3 in review; then M4)
+## 1. Where things stand (M0, M1, art pass, M5 merged; M2-M4 in review; then M6)
 
 ### Built
 - **Backend** (`backend/app/`): config validation, strict schemas, security primitives,

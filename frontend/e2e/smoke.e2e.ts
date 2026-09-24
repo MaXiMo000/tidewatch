@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { expect, test, type Page } from "@playwright/test";
 
 /** Collects CSP violations and console errors from the moment the page starts loading. */
@@ -307,4 +308,116 @@ test.describe("phones", () => {
     await expect(page.locator("html")).toHaveAttribute("data-chapter", "chapter-hops");
     await expect(page.locator("#chapter-hops .chapter-card")).toBeInViewport();
   });
+});
+
+// ---------- live mode (M4) ----------
+
+async function toLive(page: Page, quality = "medium"): Promise<void> {
+  await page.goto(`/?quality=${quality}`);
+  await expect(page.locator("html")).toHaveAttribute("data-ready", "1", { timeout: 30_000 });
+  await scrollToProgress(page, 1);
+  await expect(page.locator("html")).toHaveAttribute("data-settled", "1");
+  // The camera finishes handing over from the film (eased scroll) before free-fly is offered.
+  await page.waitForTimeout(1_500);
+}
+
+test("free-fly: drag and WASD move the live camera, 0 hands it back", async ({ page }) => {
+  const found = await watch(page);
+  await toLive(page);
+  const heading = page.locator("#hud-heading");
+  const reset = page.locator("#fly-reset");
+  await expect(reset).toBeHidden();
+  const before = await heading.textContent();
+  await page.keyboard.down("d");
+  await page.waitForTimeout(900);
+  await page.keyboard.up("d");
+  await expect(reset).toBeVisible();
+  await expect.poll(() => heading.textContent()).not.toBe(before);
+  // A drag turns the camera too, and does not count as a click on an island.
+  const afterKeys = await heading.textContent();
+  const box = await page.locator("#scene").boundingBox();
+  if (!box) throw new Error("no canvas");
+  await page.mouse.move(box.width * 0.5, box.height * 0.6);
+  await page.mouse.down();
+  await page.mouse.move(box.width * 0.5 + 220, box.height * 0.6, { steps: 8 });
+  await page.mouse.up();
+  await expect.poll(() => heading.textContent()).not.toBe(afterKeys);
+  await page.keyboard.press("0");
+  await expect(reset).toBeHidden();
+  expect(found.errors).toEqual([]);
+});
+
+test("photo mode hides every overlay and saves a real PNG of the scene", async ({ page }) => {
+  await toLive(page);
+  await page.keyboard.press("p");
+  await expect(page.locator("html")).toHaveAttribute("data-photo", "1");
+  await expect(page.locator("#hud")).toBeHidden();
+  await expect(page.locator("#island-labels")).toBeHidden();
+  const download = page.waitForEvent("download");
+  await page.locator("#photo-save").click();
+  const file = await download;
+  expect(file.suggestedFilename()).toMatch(/^tidewatch-\d{4}-\d{2}-\d{2}-\d{6}\.png$/);
+  const data = readFileSync(await file.path());
+  expect([...data.subarray(0, 8)]).toEqual([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+  expect(data.length).toBeGreaterThan(20_000); // a rendered scene, not a blank buffer
+  await page.keyboard.press("Escape");
+  await expect(page.locator("html")).toHaveAttribute("data-photo", "0");
+  await expect(page.locator("#hud")).toBeVisible();
+});
+
+test("sound is off by default and starts only from the button", async ({ page }) => {
+  const found = await watch(page);
+  await toLive(page);
+  const sound = page.locator("#sound-toggle");
+  await expect(sound).toHaveAttribute("aria-pressed", "false");
+  await sound.click();
+  await expect(sound).toHaveAttribute("aria-pressed", "true");
+  await expect(sound).toHaveText("Sound on");
+  await sound.click();
+  await expect(sound).toHaveAttribute("aria-pressed", "false");
+  expect(found.errors).toEqual([]);
+});
+
+test("screen readers get one status sentence naming anything unhealthy", async ({ page }) => {
+  await page.goto("/?quality=low");
+  await expect(page.locator("#sr-status")).toHaveText(/^(All \d+ services healthy\.|\d+ services; .+\.)$/, {
+    timeout: 15_000,
+  });
+  await expect(page.locator("#sr-status")).toHaveAttribute("aria-live", "polite");
+});
+
+test("2D view: ?view=2d shows every service as an accessible table, no 3D rendering", async ({ page }) => {
+  const found = await watch(page);
+  await page.goto("/?view=2d");
+  await expect(page.locator("html")).toHaveAttribute("data-view", "2d");
+  await expect(page.locator("#scene")).toBeHidden();
+  const rows = page.locator("#view2d-rows tr");
+  await expect(rows).toHaveCount(7, { timeout: 15_000 });
+  await expect(rows.first().locator("th")).toHaveAttribute("scope", "row");
+  await expect(rows.first().locator("td").nth(1)).toHaveText(/healthy|degraded|failing|offline/);
+  await expect(page.getByRole("table")).toBeVisible();
+  await page.locator("#view2d-exit").click();
+  await expect(page.locator("html")).toHaveAttribute("data-view", "3d");
+  await expect(page.locator("#scene")).toBeVisible();
+  expect(found.csp).toEqual([]);
+  expect(found.errors).toEqual([]);
+});
+
+test("without WebGL the 2D view is the fallback, with the reason, and no errors", async ({ page }) => {
+  const found = await watch(page);
+  // A device without WebGL: every webgl/webgl2 context request fails, as it would there.
+  await page.addInitScript(() => {
+    const original = HTMLCanvasElement.prototype.getContext;
+    HTMLCanvasElement.prototype.getContext = function (this: HTMLCanvasElement, kind: string, ...rest: unknown[]) {
+      if (kind === "webgl" || kind === "webgl2" || kind === "experimental-webgl") return null;
+      return (original as (...a: unknown[]) => unknown).call(this, kind, ...rest);
+    } as typeof HTMLCanvasElement.prototype.getContext;
+  });
+  await page.goto("/");
+  await expect(page.locator("html")).toHaveAttribute("data-view", "2d", { timeout: 15_000 });
+  await expect(page.locator("#view2d-note")).toHaveText(/WebGL is unavailable/);
+  await expect(page.locator("#view2d-rows tr")).toHaveCount(7, { timeout: 15_000 });
+  await expect(page.locator("#view-toggle")).toBeDisabled();
+  // three.js logs its own context-creation failure; anything else is ours.
+  expect(found.errors.filter((e) => !/WebGL context/i.test(e))).toEqual([]);
 });
