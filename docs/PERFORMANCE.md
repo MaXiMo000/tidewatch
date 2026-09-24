@@ -24,7 +24,7 @@ Low-end devices are a first-class target. Budgets below are **requirements**; CI
 | Draw calls (all passes: main + reflection + shadow + post) | <= 200 | <= 60 | <= 40 |
 | Triangles (all passes) | <= 400k | <= 20k | <= 10k |
 | GPU memory (render targets + textures, estimate) | <= 64 MB | <= 4 MB | <= 2 MB |
-| Download beyond the initial bundle | <= 15 MB, lazy, cached (currently 14.8 KB of JS: everything is procedural) | none - never fetches Cinematic code | none |
+| Download beyond the initial bundle | <= 15 MB, lazy, cached (currently 20.1 KB of JS: everything is procedural) | none - never fetches Cinematic code | none |
 
 Measured values per round live in `docs/HANDOVER.md`. `npm run check:bundle` enforces the
 initial (350 KB) and lazy-chunk budgets in CI; `node frontend/scripts/perf.mjs` prints fps, CPU ms,

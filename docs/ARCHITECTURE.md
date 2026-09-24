@@ -77,7 +77,12 @@ backend serves both during a deprecation window.
 | `scene/layout.ts` | Deterministic island positions from topology (longest-path columns), order-independent |
 | `scene/world.ts` | Islands (size = traffic, crown/glow = status), lanterns, channels; `sync()` per snapshot, `tick()` per frame |
 | `scene/water.ts`, `sky.ts`, `glow.ts`, `palette.ts`, `camera.ts` | Tiered water shader, camera-centred dusk dome, shared glow texture, colours, idle orbit |
-| `hud/hud.ts` | Status, text health summary, compass, quality control (textContent only) |
+| `hud/hud.ts` | Title, live status + compass strip, health summary, quality menu (keyboard), place panel, hints, legend, caption, toasts (textContent only) |
+| `hud/inspector.ts` | Island labels (focusable buttons, collision layout), screen-space picking (same on every tier), stats card |
+| `hud/copy.ts` | HUD wording: status words, per-kind subtitles, number formats |
+| `scene/islands.ts` | Islets + kind-specific structures, per-island health animation (amber pulse, red flicker), one instanced glow batch; "pbr" (Cinematic) or "flat" (Balanced/Simple, one merged mesh per islet) |
+| `scene/boats.ts` | Requests as GPU-animated boats on every channel (count follows rps); Cinematic adds wakes |
+| `scene/silhouette.ts`, `glows.ts`, `random.ts` | Kind -> structure + label heights; instanced billboards; seeded PRNG |
 | `debug/overlay.ts` | `?debug=1` fps / CPU ms / draw calls / triangles - dev builds only |
 
 Planned (M2+):
@@ -106,7 +111,8 @@ src/
 | Water | planar reflection (Reflector, half-float, `reflectionScale`), 3 normal layers, Fresnel, glint column | shader with fake (sky) reflection, animated normals | flat gradient + Fresnel |
 | Atmosphere | half-res raymarched height fog (noise, HG scatter), colour/density follow p95 | FogExp2 | FogExp2 |
 | World | mossy islets with kind-specific structures (lighthouse, tower, stilt hall, beacon, vault, jetty, workshop), instanced cypress + moss + knees, lily pads, reeds | low-poly islands, instanced silhouette treeline (90) | same, 30 trees, no glow sprites |
-| Post | fog composite, ACES, split tone (Round 3: bloom, DOF, AO, grain, CA) | CSS vignette | CSS vignette |
+| Post | bloom (lanterns/glint only), half-res height fog, depth AO + light shafts, subtle DOF, ACES, teal/pink grade, light CA, vignette, grain, lightning flash | CSS vignette | CSS vignette |
+| Requests / health | boats + wakes, shore foam, amber pulse / red flicker, storm clouds, rain, lightning, fireflies | boats, amber pulse / red flicker | boats, pulse/flicker, no glow |
 | Pixel ratio cap / target fps | 2 / 60 | 1.5 / 60 | 1 / 30 |
 
 Shared by all paths: `scene/model.ts` (layout, eased values, counts, latency, storm), the camera

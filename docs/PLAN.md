@@ -118,6 +118,8 @@ foundations come before spectacle.
 | Cinematic is fully procedural (no downloaded models/textures) | Allowed by the asset rules; avoids untrusted-file parsing, WASM decoders and any CSP relaxation; 14.8 KB lazy download instead of MBs |
 | Cinematic camera: pendulum drift around an auto-composed base view | A full orbit cannot keep framing trees at the sides without them occluding islands |
 | prefers-reduced-motion stops the camera (overrides "never frozen") | The OS accessibility setting outranks the cinematic brief |
+| Fonts: Cormorant Garamond + IBM Plex Mono via @fontsource (OFL-1.1), Latin subset, 5 weights | Self-hosted from our origin (rule 5, CSP font-src 'self'); 100 KB WOFF2 |
+| Same world on every tier: shared islands/structures/boats, flat materials below Cinematic | "Same world, different render path"; Balanced/Simple stay inside their budgets |
 
 ## 6. Open questions for the owner
 
