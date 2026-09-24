@@ -9,7 +9,7 @@ residual risks we accept. If a control below is marked `[planned]`, it is not in
 | ID | Asset | Why it matters |
 | --- | --- | --- |
 | A1 | Metrics and topology data | Reveals architecture, load and incidents (live mode) |
-| A2 | Upstream credentials (Prometheus etc.) | Would give read access to internal systems |
+| A2 | Upstream credentials (the per-app metrics tokens, `TIDEWATCH_SOURCE_TOKENS`) | Would let anyone read the apps' aggregate metrics directly |
 | A3 | API keys / WebSocket tickets | Gate access to live data |
 | A4 | Service availability | A public WebSocket endpoint is a DoS target |
 | A5 | Visitors' browsers | XSS or supply-chain compromise runs code in their session |
@@ -25,7 +25,8 @@ that is not meant for them; a mistaken contributor committing a secret.
 
 1. Browser <-> Caddy (public internet, TLS).
 2. Caddy <-> backend (private container network).
-3. Backend <-> upstream metrics API (internal network, credentials).
+3. Backend <-> the watched apps' `GET /tidewatch/metrics` endpoints (public internet, TLS, one
+   bearer token per app). The apps are separate repos; their add-on is `addons/`.
 4. Repository <-> CI <-> release artefacts (supply chain).
 
 Everything crossing 1 and 3 is untrusted input and is validated.
@@ -38,8 +39,8 @@ Everything crossing 1 and 3 is untrusted input and is validated.
 | T2 | Credentials leaking via URLs/logs/history/Referer | Ticket sent as first WS message, never in URL; `Referrer-Policy: no-referrer` | `main.py`, `client.ts` | done |
 | T3 | Ticket theft/replay | Single-use, 30 s TTL, only SHA-256 digests stored, 256-bit random | `security.py` `TicketStore` | done |
 | T4 | Brute-forcing API keys / timing attacks | Constant-time compare; ticket endpoint rate-limited per IP | `security.py` | done (single instance) |
-| T5 | Unauthorised live data access | Live mode requires an API key for tickets; **browser-grade auth (OIDC) is required before exposing live mode publicly** | `main.py` | partial - see M5 |
-| T6 | Data exfiltration through the stream | Strict allowlist schemas (`extra="forbid"`, bounded), explicit label mapping, no raw upstream data | `schemas.py`, ARCH s.6 | done (schemas); mapping planned M5 |
+| T5 | Unauthorised live data access | Live mode requires an API key for tickets **unless** `TIDEWATCH_LIVE_PUBLIC=true`; public live mode is an explicit, dated owner risk acceptance (s.8) and must be switched on deliberately (`TIDEWATCH_MODE=live` + `TIDEWATCH_LIVE_PUBLIC=true`). What it exposes is bounded by T6 | `config.py`, `main.py` | accepted risk (owner, 2026-09-24) |
+| T6 | Data exfiltration through the stream | Strict allowlist schemas (`extra="forbid"`, bounded). Live payloads are validated by their own strict model and **mapped**, never forwarded: island ids are config ids + fixed dependency ids, display names come from config; only rate, p95, error rate, status reach browsers | `schemas.py`, `live.py`, ARCH s.6 | done |
 | T7 | XSS | No `innerHTML`/eval/inline code, `textContent` only, strict CSP (`script-src 'self'`), zod validation, Trusted Types `[planned M6]` | `client.ts`, `deploy/Caddyfile` | done / planned |
 | T8 | Third-party script compromise | No third-party origins at runtime; self-hosted assets; SRI if ever unavoidable | CSP, code review | done |
 | T9 | DoS via connections | Global and per-IP WS caps; auth timeout (5 s); message size cap; per-connection message rate cap | `security.py`, `main.py` | done |
@@ -48,8 +49,8 @@ Everything crossing 1 and 3 is untrusted input and is validated.
 | T12 | Host-header attacks / DNS rebinding | `TrustedHostMiddleware` with exact hosts; wildcards (`*`, `*.x`) and non-exact origins rejected at startup | `main.py`, `config.py` | done |
 | T13 | Clickjacking | `frame-ancestors 'none'` (API + frontend CSP; Caddy sets the frontend CSP on static files only, so the API keeps its own) | `security.py`, Caddyfile | done (smoke-tested) |
 | T14 | MIME sniffing / caching of sensitive responses | `nosniff`; API `Cache-Control: no-store` | `security.py` | done |
-| T15 | SSRF via adapters | Config-only endpoints, IP/host validation, deny link-local/metadata/private by default, timeouts, size caps | ARCH s.6 | planned M5 |
-| T16 | Query injection into upstream | Fixed queries in code; only allowlisted ids interpolated | ARCH s.6 | planned M5 |
+| T15 | SSRF via adapters | URLs from config only (https in prod; no userinfo, query or fragment); host resolved on **every** poll and refused unless every address is public (loopback, private, link-local incl. 169.254.169.254, CGNAT, multicast denied; `TIDEWATCH_LIVE_ALLOW_PRIVATE` is dev-only); connection pinned to the checked IP with Host/SNI set to the name (no DNS-rebinding window); no redirects, no env proxies (`trust_env=False`); 3 s connect / 5 s read; 64 KB streamed cap; no compression | `config.py`, `live.py`, `tests/test_live.py` | done |
+| T16 | Query injection into upstream | n/a by design: no query language - one fixed endpoint per app (`GET /tidewatch/metrics`), nothing user-supplied is sent | `live.py` | n/a (fixed endpoint) |
 | T17 | Secret committed to a public repo | `.gitignore`, `.env.example` only, pre-commit gitleaks + `detect-private-key`, CI gitleaks, GitHub secret scanning + push protection | repo, `scripts/harden-repo.sh` | done (harden script applied and verified) |
 | T18 | Vulnerable dependencies | Lockfiles (npm + hash-pinned `requirements.lock`), Dependabot, `pip-audit` (venv + lock), `npm audit`, CodeQL; `npm ci --ignore-scripts` | CI | done (green in CI) |
 | T19 | Malicious/compromised GitHub Action | Actions pinned to commit SHAs (enforced by the repo's `sha_pinning_required`); `permissions: contents: read`; `persist-credentials: false` | `.github/workflows`, `scripts/harden-repo.sh` | done |
@@ -57,7 +58,8 @@ Everything crossing 1 and 3 is untrusted input and is validated.
 | T21 | Information disclosure via errors/docs | OpenAPI/docs disabled in prod; generic error responses; no stack traces to clients | `main.py` | done |
 | T22 | Weak production config | Startup validation: prod requires https origins and >= 32-char keys; live requires keys | `config.py` | done |
 | T23 | Tampered release artefacts | SBOM + build provenance attestation | CI | planned M6 |
-| T24 | Log injection / secret logging | Never log tickets/keys/headers; structured logs with redaction | code review | planned (M5 logging) |
+| T24 | Log injection / secret logging | Never log tickets/keys/headers. `LiveSource` logs only `source id: outcome` from a fixed vocabulary, once per change; a test asserts tokens never reach logs | `live.py`, `tests/test_live.py` | done (live); structured logs M6 |
+| T25 | The apps' metrics endpoint leaking data or access | Add-on route exists only when `TIDEWATCH_METRICS_TOKEN` is set; token compared in constant time; records only (duration, ok) per request/dependency call - never URLs, routes, bodies, headers, user ids; `no-store`; fixed dependency ids, max 8; tests in each app | `addons/`, the apps' repos | done |
 
 ## 5. Secure development rules
 
@@ -88,12 +90,23 @@ weaken a check to get CI green.
 - [ ] Trusted Types enforced (or documented reason why not)
 - [ ] ZAP baseline scan has no medium+ findings
 - [ ] Live adapters: SSRF test suite passes; upstream credentials are read-only; no upstream label reaches clients unmapped
-- [ ] Live mode is behind real authentication (OIDC) - **not** the API-key gate
+- [x] ~~Live mode is behind real authentication (OIDC)~~ - replaced by the owner's risk acceptance (s.8, 2026-09-24): public, aggregates only
 - [ ] Secrets scan of full git history clean; GitHub push protection enabled
 - [ ] SBOM + provenance published for the release
 - [x] Docker base images pinned by digest; dependencies hash-pinned (M0: `python:3.12-slim@sha256`, `caddy:2@sha256`, `backend/requirements.lock`, npm lockfile integrity hashes)
 
 ## 8. Residual risks we accept (and why)
+
+- **Public live data (owner risk acceptance, 2026-09-24).** The owner decided live mode is public,
+  with no login, overriding T5's OIDC requirement. Exposed to anyone: per app and per dependency
+  (database, cache, queue, AI / external API) the request rate, p95 latency, error rate and
+  ok/degraded/failing/offline status, plus the display names in `TIDEWATCH_LIVE_SOURCES`. Never
+  exposed: URLs, hostnames, routes, bodies, headers, tokens, user data. Consequence accepted:
+  anyone can see when the apps are busy, slow or down. Live mode stays off unless
+  `TIDEWATCH_MODE=live` and `TIDEWATCH_LIVE_PUBLIC=true` are both set. Revisit before watching an
+  app whose load itself is sensitive.
+- **Polling only while watched** means the apps (Render free, sleeping) are woken by a visitor;
+  a visitor can therefore cause at most one poll per `live_poll_seconds` per app.
 
 - **In-memory limits/tickets are per instance.** Fine for one instance; multi-instance needs Redis (M5).
 - **Client IP depends on the reverse proxy** setting `X-Forwarded-For` correctly; behind a CDN,

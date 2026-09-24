@@ -8,7 +8,16 @@ export const STATUS_WORD: Record<Status, string> = {
   ok: "healthy",
   degraded: "degraded",
   failing: "failing",
+  offline: "offline",
 };
+
+/** Display names from /api/v1/info (live mode), e.g. "aninest" -> "AniNest". */
+const NAMES = new Map<string, string>();
+
+export function setDisplayNames(sources: readonly { id: string; name: string }[]): void {
+  NAMES.clear();
+  for (const s of sources) NAMES.set(s.id, s.name);
+}
 
 const KIND_SUBTITLE: Record<Kind, string> = {
   gateway: "The lighthouse at the mouth of the swamp. Every request passes here.",
@@ -27,6 +36,12 @@ export function subtitleFor(id: string, kind: Kind): string {
 }
 
 export function prettyName(id: string): string {
+  const named = NAMES.get(id);
+  if (named) return named;
+  // A live dependency island is "<app>-<dep>": "aninest-db" -> "AniNest DB".
+  const dash = id.indexOf("-");
+  const app = dash > 0 ? NAMES.get(id.slice(0, dash)) : undefined;
+  if (app) return `${app} ${prettyName(id.slice(dash + 1))}`;
   return id
     .split("-")
     .map((w) => (w.length <= 3 ? w.toUpperCase() : w[0]?.toUpperCase() + w.slice(1)))

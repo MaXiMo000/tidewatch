@@ -11,7 +11,7 @@ export const PALETTE = {
   rock: 0x9a8fb0,
   lantern: 0xffb45e,
   channel: 0x7fd6e6,
-  status: { ok: 0x3fd0a5, degraded: 0xf2b134, failing: 0xff4d5e },
+  status: { ok: 0x3fd0a5, degraded: 0xf2b134, failing: 0xff4d5e, offline: 0x59606b },
 } as const;
 
 /** Low evening sun, behind and to the left of the default camera. Unit vector. */

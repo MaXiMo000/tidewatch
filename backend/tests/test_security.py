@@ -123,14 +123,6 @@ def test_per_ip_connection_cap() -> None:
             assert exc.value.code == 1013
 
 
-def test_live_mode_requires_api_key() -> None:
-    key = "k" * 40
-    settings = make_settings(mode="live", api_keys=[SecretStr(key)])
-    # No live adapter yet -> app refuses to start rather than silently serving fake data.
-    with pytest.raises(NotImplementedError):
-        create_app(settings)
-
-
 def test_config_rejects_wildcards_and_weak_prod() -> None:
     with pytest.raises(ValidationError):
         make_settings(allowed_origins=["*"])
@@ -139,7 +131,7 @@ def test_config_rejects_wildcards_and_weak_prod() -> None:
     with pytest.raises(ValidationError):
         make_settings(env="prod")  # http origin in prod
     with pytest.raises(ValidationError):
-        make_settings(mode="live")  # live without keys
+        make_settings(mode="live")  # live without keys (or live_public) and sources
     with pytest.raises(ValidationError):
         make_settings(
             env="prod",

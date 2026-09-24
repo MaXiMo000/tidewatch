@@ -3,7 +3,55 @@
 Audience: Claude Code (or any engineer) picking this project up cold. Read this file, then
 `CLAUDE.md`, then the milestone you are working on in `docs/PLAN.md`.
 
-## 1. Where things stand (M1 merged; art pass Rounds 1-4 in review (PR #15) - then M2)
+## 0. Current state: M5 live data done, PR #16 in review (branch `m5-live`)
+
+M0, M1 and the art pass (PR #15) are merged. M5 (real data before M2, owner decision) is
+implemented on `m5-live` / PR #16 following **`docs/M5-LIVE-PLAN.md`** s.4, steps 1-9 all done:
+
+- **Backend**: `offline` status + `GET /api/v1/info` (schemas.py and protocol.ts in sync); live
+  config (`TIDEWATCH_LIVE_SOURCES`, `_SOURCE_TOKENS`, `_LIVE_PUBLIC`, `_LIVE_POLL_SECONDS`,
+  `_LIVE_ALLOW_PRIVATE`); `app/live.py` `LiveSource` (SSRF-checked, polls only while watched,
+  strict payload model, mapping to Snapshot; third-party `service` deps judged by errors only).
+- **Frontend**: offline islands on every tier, "n offline" summary, legend row, live caption and
+  display names from `/api/v1/info`.
+- **Deploy**: `render.yaml` + `deploy/render/` (one free Docker service, Caddy on `$PORT` +
+  uvicorn on loopback, client-IP handling), `scripts/smoke_render.py` in CI.
+- **Apps** (pushed to their default branches, CI green, inert until the token env var is set):
+  AniNest `master` d851dc3 (db = libSQL, anime-api = Jikan/AniList), Quiz-App `main` 59682c4
+  (db = MongoDB command monitoring, cache = Redis via cacheService, ai = Gemini), LabLedger `main`
+  0e65795 (db = pymongo CommandListener, queue = arq enqueue, ai = Gemini). Canonical add-ons:
+  `addons/`.
+- **Verified end to end locally** with real AniNest data: `docs/screenshots/m5/`.
+- **Docs**: SECURITY.md (owner risk acceptance s.8, T5/T6/T15/T16/T24/T25), ARCHITECTURE s.3/s.6/s.7,
+  PLAN M5, `.env.example`.
+
+**Next:** the owner reviews/merges PR #16 and does the Render steps in `docs/M5-LIVE-PLAN.md` s.5
+(tokens, env vars, Blueprint). LabLedger and Quiz-App show **offline** until they are redeployed
+next month with their token set - expected, not a bug. Then M2.
+
+Not verified: a real Render deploy (needs the owner's account); the apps' deployed endpoints
+(deliberately never contacted); fps of the live view on real GPUs (screenshots used SwiftShader).
+Rules unchanged: app repos may have **uncommitted local work that is not ours - never stage,
+stash, reset or discard it**; don't curl the apps' live URLs without asking.
+
+### Session environment notes (Windows 11 laptop, Intel UHD)
+- Shells: PowerShell (primary) and Git Bash. Python venv at `backend/.venv/Scripts/python.exe`.
+- gitleaks before every commit:
+  `/c/Users/ADMIN/tools/gitleaks/gitleaks.exe git --pre-commit --staged --no-banner --redact .`
+- Dev servers in the desktop app: `preview_start` names `tidewatch-backend` (uvicorn :8000) and
+  `tidewatch-frontend` (Vite, port 5174) from `C:\Users\ADMIN\Documents\Personal\.claude\launch.json`
+  (the parent folder, not this repo).
+- Docker Desktop works (compose stack + `lock-backend.sh`). `gh` is authenticated as MaXiMo000.
+- `main` is protected: squash-only, 6 required checks (backend, frontend, compose, gitleaks,
+  analyze (python), analyze (javascript-typescript)). Work on a branch, open a PR.
+- Commit trailer: `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`; PR body ends with
+  `🤖 Generated with [Claude Code](https://claude.com/claude-code)`.
+- Open Dependabot PRs for Python 3.14 and TypeScript 7 are **owner decisions** - leave them.
+- Steps 5-9 of M5 ran in a Claude Code cloud session (Linux): Docker works there, so LabLedger's
+  suite ran against `mongo:7` and Quiz-App's `mongodb-memory-server` used the image's `mongod`
+  (`MONGOMS_SYSTEM_BINARY`) because the sandbox blocks fastdl.mongodb.org.
+
+## 1. Where things stand (M0, M1, art pass merged; M5 live data in PR #16; then M2)
 
 ### Built
 - **Backend** (`backend/app/`): config validation, strict schemas, security primitives,
@@ -21,7 +69,11 @@ Audience: Claude Code (or any engineer) picking this project up cold. Read this 
   CI (backend, frontend, compose smoke test, gitleaks, CodeQL) with SHA-pinned actions (enforced by
   the repo setting), Dependabot (pip, npm, actions, docker, docker-compose).
 
-### Art pass (before M2) - Rounds 1-4 done, awaiting owner review (PR #15)
+### Art pass (before M2) - Rounds 1-4 done, merged (PR #15)
+Tiers are now named Cinematic / Balanced / Simple (URL `?quality=high|medium|low`). Cinematic is a
+lazy chunk (`src/cinematic/`), Balanced/Simple share `src/render/stylised.ts`; both read the one
+`WorldModel`. HUD: `src/hud/` (inspector with picking, quality menu, legend, Q/L/Esc keys).
+Tests now: 33 vitest, 10 Playwright.
 Screenshots + critique logs per round: `docs/screenshots/round-{1,2,3,4}/`.
 
 | Tier | Draw calls | Triangles | GPU mem (est.) | CPU ms/frame | Download beyond initial |
@@ -108,13 +160,11 @@ cd ../frontend && E2E_BASE_URL=https://localhost E2E_CHANNEL=chrome npm run e2e 
 
 ## 3. Suggested prompt for Claude Code
 
-> Read `CLAUDE.md`, `docs/HANDOVER.md`, `docs/PLAN.md` and `docs/SECURITY.md`. Complete Milestone M0
-> exactly as described in HANDOVER section 2: get every backend and frontend check green without
-> weakening any security control, commit `package-lock.json`, get CI green, and get the compose stack
-> serving the placeholder scene over HTTPS. Report anything in the "NOT verified" table that turned
-> out to be wrong. Then update the "Where things stand" section of `docs/HANDOVER.md` and stop for review.
+> Read `CLAUDE.md`, `docs/HANDOVER.md` (section 0 first) and `docs/PLAN.md`. Complete Milestone M2
+> exactly as described there, with the same rules as always: one commit per step, CI green, docs in
+> sync, then stop for review.
 
-Subsequent prompts: "Complete Milestone M1", "M2", ... each with the same rules.
+Then M3, M4, M6, with the same rules each time.
 
 ## 4. Publishing and GitHub settings
 
@@ -136,8 +186,8 @@ branch protection on `main` requiring all six CI checks, squash-only linear hist
 ## 6. Glossary
 
 - **Snapshot** - one tick of all service metrics and edges (`schemas.Snapshot`).
-- **Source** - producer of snapshots (`DemoSource`, later Prometheus/OTel adapters).
+- **Source** - producer of snapshots (`DemoSource`; M5 adds `LiveSource`, polling the apps' metrics add-ons).
 - **Hub** - fan-out from one source to many bounded per-client queues.
 - **Ticket** - single-use, 30 s token that authorises one WebSocket connection.
 - **Story mode / live mode** - scripted scroll movie vs. real-data free-fly view.
-- **Tier** - quality preset (High/Medium/Low) chosen by GPU detection and the FPS governor.
+- **Tier** - quality preset (Cinematic/Balanced/Simple, internally high/medium/low) chosen by GPU detection and the FPS governor.

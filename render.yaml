@@ -1,0 +1,25 @@
+# Render Blueprint: one free Docker web service (Caddy + uvicorn in one container).
+# See deploy/render/ and docs/M5-LIVE-PLAN.md s.3.5. Secrets and real app URLs are NOT in this
+# file: they are `sync: false`, so Render asks for them when the Blueprint is created.
+services:
+  - type: web
+    name: tidewatch
+    runtime: docker
+    plan: free
+    dockerfilePath: ./deploy/render/Dockerfile
+    dockerContext: .
+    healthCheckPath: /healthz
+    envVars:
+      - key: TIDEWATCH_ENV
+        value: prod
+      - key: TIDEWATCH_MODE
+        value: live
+      # Owner risk acceptance (docs/SECURITY.md): aggregates only, no login.
+      - key: TIDEWATCH_LIVE_PUBLIC
+        value: "true"
+      # JSON list: [{"id":"aninest","name":"AniNest","url":"https://<host>/tidewatch/metrics"}, ...]
+      - key: TIDEWATCH_LIVE_SOURCES
+        sync: false
+      # JSON map, one token per source id: {"aninest":"<token>", ...}. Never commit it.
+      - key: TIDEWATCH_SOURCE_TOKENS
+        sync: false

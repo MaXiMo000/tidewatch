@@ -13,10 +13,10 @@
            |        |
         Hub (1 producer -> N bounded queues)
            |
-     Source: DemoSource (default)  |  PrometheusSource / OTel source (M5, read-only)
+     Source: DemoSource (default)  |  LiveSource (M5: polls the watched apps' /tidewatch/metrics)
 ```
 
-One public origin. The browser never talks to Prometheus, never holds upstream credentials, and
+One public origin. The browser never talks to the watched apps, never holds their tokens, and
 never receives raw upstream data.
 
 ## 2. Backend modules (`backend/app/`)
@@ -27,7 +27,8 @@ never receives raw upstream data.
 | `schemas.py` | The **only** shapes allowed to reach a browser. Strict, bounded, `extra="forbid"` |
 | `security.py` | Security-headers ASGI middleware, single-use `TicketStore`, `SlidingWindowLimiter`, `ConnectionLimiter`, constant-time API-key check |
 | `demo.py` | `DemoSource`: synthetic 7-service graph with a scripted 90 s incident cycle |
-| `hub.py` | `Hub`: one producer, per-client queues of max 2 frames, drop-oldest (latest-wins) |
+| `live.py` | `LiveSource`: polls each watched app's metrics add-on (only while someone watches), validates and maps the payloads to `Snapshot` (s.6) |
+| `hub.py` | `Hub`: one producer, per-client queues of max 2 frames, drop-oldest (latest-wins); `watchers()` count |
 | `main.py` | App factory, routes, WebSocket handler, middleware order |
 
 A **Source** is anything with `async def stream() -> AsyncIterator[Snapshot]`. Adding a real data
@@ -35,9 +36,15 @@ source means implementing that protocol and returning already-validated `Snapsho
 
 ## 3. HTTP + WebSocket protocol (v1)
 
+### `GET /api/v1/info`
+- `{"mode": "demo" | "live", "sources": [{"id": "aninest", "name": "AniNest"}, ...]}` (strict
+  `InfoResponse`; `sources` empty in demo). The HUD uses it once at start for the caption
+  ("Live · AniNest, LabLedger, Quiz-App") and island display names.
+
 ### `POST /api/v1/ws-ticket`
 - Demo mode: open, rate-limited per IP (default 10/min).
-- Live mode: requires `Authorization: Bearer <api key>` (M5 replaces this for browsers with real auth).
+- Live mode: requires `Authorization: Bearer <api key>`, unless `TIDEWATCH_LIVE_PUBLIC=true`
+  (owner risk acceptance, SECURITY.md s.8): then open like demo mode.
 - Response: `{"ticket": "<43-char urlsafe>", "expires_in": 30}`. Ticket is single-use, 30 s TTL.
 - Errors: `401` (live, bad/missing key), `429` (rate limit), `503` (ticket store full).
 
@@ -55,6 +62,8 @@ source means implementing that protocol and returning already-validated `Snapsho
                   "error_rate": 0.0021, "status": "ok" } ],
   "edges":    [ { "src": "gateway", "dst": "api", "rps": 377.0 } ] }
 ```
+   `status` is `ok | degraded | failing | offline`; `offline` means a live source could not be
+   reached (or sent nothing valid) for more than 2 polls.
 5. Client messages after auth are ignored except for size/rate enforcement (keep-alive only).
 
 Close codes: `1000` normal, `1008` policy violation (auth/origin), `1009` message too big,
@@ -142,26 +151,44 @@ JSON served from our own origin (`/benchmarks/*.json`, emitted by a Vite plugin 
 package) and loaded through `loadBenchmarks` with a name allowlist and size cap - the library's
 unpkg.com default is never used. Phones and tablets are never auto-promoted to Cinematic.
 
-## 6. Live data adapters (M5) - design
+## 6. Live data (M5): metrics add-ons + `LiveSource`
 
-Goal: real metrics in, only allowlisted aggregates out.
+Goal: real metrics in, only allowlisted aggregates out. No Prometheus: each watched app serves
+its own aggregates and Tidewatch polls them (owner decision, `docs/M5-LIVE-PLAN.md`).
 
-1. **Poll on the server at a fixed interval**, independent of the number of viewers.
-2. **Config-only endpoints.** The upstream URL comes from server config, never from a request.
-   Resolve and validate the target: https only in prod, deny loopback/link-local/metadata
-   (`169.254.169.254`) and private ranges unless explicitly allow-listed. This closes SSRF.
-3. **Fixed queries.** PromQL is defined in code, parameterised only by service ids from an
-   allowlist. No user-supplied query text anywhere.
-4. **Explicit mapping** from upstream labels to public service ids (`config/services.yaml`-style).
-   Unmapped series are dropped. Output only through `schemas.Snapshot`.
-5. **Least privilege.** Read-only token for the metrics API; stored in env/secret manager; never
-   logged; never returned. Rotate on suspicion.
-6. **Limits.** Connect/read timeouts, max response bytes, max series count, circuit breaker with
-   backoff; on failure publish last-known data flagged `stale` rather than erroring clients.
-7. **Multi-instance.** Move `TicketStore`, rate limits and (optionally) the latest snapshot to Redis
-   (`GETDEL` for tickets). Until then run a single backend instance.
-8. **Emitting metrics from FastAPI apps.** Provide a tiny ASGI middleware that records only
-   `(service, route_template, status_class, duration)` - never full URLs, query strings, headers, or bodies.
+```
+AniNest API  ─┐  GET /tidewatch/metrics   (Bearer token per app, aggregates only)
+Quiz-App API ─┼────────────────────────►  LiveSource (polls only while someone watches)
+LabLedger API ┘                            ─► validate ─► map ─► schemas.Snapshot ─► browsers
+```
+
+1. **The add-on** (`addons/`, vendored into each app): rolling 60 s window of 1 s buckets per
+   series (the app's HTTP traffic + up to 8 dependencies: db, cache, queue, ai, anime-api...);
+   count, 5xx count, p95 from a 32-bucket log histogram. Records only (duration, ok) - never
+   URLs, routes, bodies, headers or user ids. Route exists only when the app has
+   `TIDEWATCH_METRICS_TOKEN`; constant-time token check. Contract in `addons/README.md`.
+2. **Config-only endpoints.** `TIDEWATCH_LIVE_SOURCES` (JSON `[{id, name, url}]`) and
+   `TIDEWATCH_SOURCE_TOKENS` (JSON `{id: token}`, one per source) are validated at startup: https
+   in prod, no userinfo/query/fragment, ids `[a-z0-9]{1,15}` and not `internet`, 1..8 sources.
+3. **SSRF.** Every poll resolves the host and refuses non-public addresses (loopback, private,
+   link-local/metadata, CGNAT, multicast) unless `TIDEWATCH_LIVE_ALLOW_PRIVATE` (dev only); the
+   request goes to the checked IP with Host/SNI set to the name; no redirects, no env proxies.
+4. **Limits.** 3 s connect / 5 s read, 64 KB streamed cap, identity encoding only, strict payload
+   model (`extra="forbid"`, bounded numbers, errors <= count, unique dep ids, max 8).
+5. **Only while watched.** The Hub's `watchers()` count gates polling: with no viewers nothing is
+   polled, so Render free apps are not kept awake; the first viewer triggers an immediate poll.
+   Interval `TIDEWATCH_LIVE_POLL_SECONDS` (default 10, 5..120).
+6. **Mapping** (the only thing that leaves): island `internet` (gateway, the lighthouse) -> one
+   `service` island per app (config id, config display name) -> one island `<app>-<dep>` per
+   dependency, of the kind the add-on declared. Edge rps = request rate. Status per island:
+   error rate > 5% or p95 > 1500 ms = failing; > 1% or > 400 ms = degraded; else ok. Third-party
+   `service` dependencies (an LLM, an external API) are judged by error rate only - seconds per
+   call is normal for them. Unreachable / timeout / 401 / invalid payload: keep the last good
+   numbers for 2 polls, then `offline` (topology is kept, so islands do not jump around).
+7. **Logging.** `live source <id>: <outcome>` from a fixed vocabulary, once per change. Never
+   tokens, URLs with credentials, or response bodies.
+8. **Multi-instance.** Still single-instance: `TicketStore`, rate limits and the poller are in
+   memory. Moving them to Redis (`GETDEL` for tickets) is future work.
 
 ## 7. Deployment
 
@@ -171,6 +198,16 @@ The backend network is `internal: true` (no route out; M5 adapters get a dedicat
 The image installs only hash-verified wheels from `backend/requirements.lock`; base images are
 pinned by digest. Frontend is built to static files and served by Caddy. Config only via
 environment. `scripts/smoke_compose.py` checks the running stack (also run by the CI `compose` job).
+
+**Render (M5, the public deployment):** `render.yaml` + `deploy/render/` - one free Docker web
+service. The image builds the frontend, installs the backend from the hash-checked lock and copies
+the pinned Caddy binary; `start.sh` runs Caddy on `$PORT` (plain HTTP, Render terminates TLS; same
+headers/CSP as `deploy/Caddyfile`, HSTS kept) and uvicorn on 127.0.0.1, derives allowed
+hosts/origins and the CSP `wss://` host from `RENDER_EXTERNAL_HOSTNAME`, and exits if either
+process dies. Client IP: Caddy trusts only private ranges (`trusted_proxies_strict`, rightmost
+untrusted `X-Forwarded-For` entry) and hands uvicorn exactly one value, so per-IP limits work and
+cannot be spoofed by prepending entries (`scripts/smoke_render.py`, CI). Free plan: sleeps after
+~15 min idle, ~1 min cold start (accepted).
 
 ## 8. Testing strategy
 

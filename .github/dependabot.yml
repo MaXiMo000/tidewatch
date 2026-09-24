@@ -14,6 +14,9 @@ updates:
   - package-ecosystem: docker
     directory: /backend
     schedule: { interval: weekly }
+  - package-ecosystem: docker
+    directory: /deploy/render
+    schedule: { interval: weekly }
   - package-ecosystem: docker-compose
     directory: /deploy
     schedule: { interval: weekly }

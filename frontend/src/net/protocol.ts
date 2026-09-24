@@ -15,7 +15,7 @@ export const ServiceSchema = z
     rps: Rate,
     p95_ms: z.number().min(0).max(600_000),
     error_rate: z.number().min(0).max(1),
-    status: z.enum(["ok", "degraded", "failing"]),
+    status: z.enum(["ok", "degraded", "failing", "offline"]),
   })
   .strict();
 
@@ -36,5 +36,20 @@ export const TicketSchema = z
   .object({ ticket: z.string().min(20).max(128), expires_in: z.number().int().positive() })
   .strict();
 
+/** GET /api/v1/info: demo vs live, and the watched apps' display names (plain text). */
+export const InfoSchema = z
+  .object({
+    mode: z.enum(["demo", "live"]),
+    sources: z
+      .array(
+        z
+          .object({ id: ServiceId, name: z.string().regex(/^[A-Za-z0-9][A-Za-z0-9 ._-]{0,31}$/) })
+          .strict(),
+      )
+      .max(16),
+  })
+  .strict();
+
 export type Snapshot = z.infer<typeof SnapshotSchema>;
+export type Info = z.infer<typeof InfoSchema>;
 export type ServiceMetrics = z.infer<typeof ServiceSchema>;

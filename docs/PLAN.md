@@ -89,13 +89,26 @@ foundations come before spectacle.
 - 2D fallback dashboard when WebGL is unavailable or the device is below a minimum tier.
 - **Accept:** a11y pass (keyboard, screen-reader summary of status), fallback verified.
 
-### M5 - Real data + authentication
+### M5 - Real data + authentication (done in PR #16, before M2 - owner decision 2026-09-24)
+- [x] Protocol `offline` + `/api/v1/info`, live config, `LiveSource` (SSRF tests, polls only while watched)
+- [x] Frontend offline visuals, live caption, zod sync
+- [x] Render deployment (`render.yaml`, `deploy/render/`, client-IP handling, smoke test in CI)
+- [x] Metrics add-ons (`addons/`) in AniNest, Quiz-App, LabLedger, each with tests, pushed
+- [x] Local end-to-end run with real AniNest data (`docs/screenshots/m5/`)
+- [x] SECURITY.md owner risk acceptance; ARCHITECTURE s.6 rewritten
+- [ ] Owner: tokens + Render Blueprint (`docs/M5-LIVE-PLAN.md` s.5)
+- **Re-scoped:** see `docs/M5-LIVE-PLAN.md` (decisions, design, ordered tasks). Short version: no
+  Prometheus; a small metrics add-on in each of the owner's apps (AniNest, LabLedger, Quiz-App),
+  polled by a `LiveSource` only while watched; public aggregates-only view (owner risk acceptance
+  replaces OIDC for now); hosted on Render free. The original scope below stays for later.
 - Adapters: Prometheus (server-side polling, fixed queries) and an ASGI middleware/OpenTelemetry
   source for FastAPI apps. See `docs/ARCHITECTURE.md` section 6 for the security design.
 - Real user auth for live mode (OIDC via an identity-aware proxy or built-in), replacing the API-key gate
   for browsers. Redis-backed ticket store + rate limits for multi-instance deployments.
 - **Accept:** SSRF tests pass; upstream cost is independent of viewer count; no upstream label ever
-  reaches a client without passing through the mapping + schema layer.
+  reaches a client without passing through the mapping + schema layer. (Met for the re-scoped M5.
+  Still open from the original scope: OIDC - replaced for now by the owner's risk acceptance - and
+  the Redis-backed ticket store for multi-instance.)
 
 ### M6 - Hardening and launch
 - Enforce Trusted Types (report-only first); ZAP baseline scan in CI; k6 WebSocket load test;
@@ -120,10 +133,13 @@ foundations come before spectacle.
 | prefers-reduced-motion stops the camera (overrides "never frozen") | The OS accessibility setting outranks the cinematic brief |
 | Fonts: Cormorant Garamond + IBM Plex Mono via @fontsource (OFL-1.1), Latin subset, 5 weights | Self-hosted from our origin (rule 5, CSP font-src 'self'); 100 KB WOFF2 |
 | Same world on every tier: shared islands/structures/boats, flat materials below Cinematic | "Same world, different render path"; Balanced/Simple stay inside their budgets |
+| Live data from a metrics add-on in each app, not Prometheus | Owner decision 2026-09-24: no Prometheus running; apps are the owner's own (Express x2, FastAPI) |
+| Live view public, aggregates only (no login) | Owner decision 2026-09-24; recorded as risk acceptance in SECURITY.md during M5 |
+| Hosting: Render free, single Docker service (Caddy + uvicorn) | Owner decision 2026-09-24: free, already used for the apps; cold starts accepted |
 
 ## 6. Open questions for the owner
 
-1. Real data source priority: Prometheus first, or an ASGI middleware SDK for your own FastAPI apps?
-2. Is the live view meant to be public (demo only) or private (behind login)? Affects M5 auth design.
-3. Sound: yes/no for ambience?
-4. Hosting target (VPS + compose, Fly.io, Cloud Run, ...)? Affects WebSocket + Redis choices.
+1. ~~Real data source~~ - answered 2026-09-24: metrics add-on in the owner's apps (see section 5).
+2. ~~Public or private live view~~ - answered: public, aggregates only.
+3. Sound: yes/no for ambience? (still open)
+4. ~~Hosting target~~ - answered: Render free.

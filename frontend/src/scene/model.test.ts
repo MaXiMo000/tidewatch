@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { Snapshot } from "../net/protocol";
 import { latencyFactor, WorldModel } from "./model";
 
-function snap(seq: number, p95: number, status: "ok" | "degraded" | "failing" = "ok"): Snapshot {
+function snap(seq: number, p95: number, status: Snapshot["services"][number]["status"] = "ok"): Snapshot {
   return {
     v: 1,
     type: "snapshot",
@@ -38,9 +38,18 @@ describe("WorldModel", () => {
     const m = new WorldModel();
     m.sync(snap(1, 1800, "failing"));
     for (let i = 0; i < 100; i++) m.tick(0.1);
-    expect(m.counts).toEqual({ ok: 1, degraded: 0, failing: 1 });
+    expect(m.counts).toEqual({ ok: 1, degraded: 0, failing: 1, offline: 0 });
     expect(m.storm).toBeCloseTo(0.5, 2);
     expect(m.latency).toBeCloseTo((latencyFactor(20) + latencyFactor(1800)) / 2, 2);
+  });
+
+  it("an offline island counts as offline and does not thin the mist or dilute the storm", () => {
+    const m = new WorldModel();
+    m.sync(snap(1, 0, "offline"));
+    for (let i = 0; i < 100; i++) m.tick(0.1);
+    expect(m.counts).toEqual({ ok: 1, degraded: 0, failing: 0, offline: 1 });
+    expect(m.latency).toBeCloseTo(latencyFactor(20), 3);
+    expect(m.islands.get("db")?.weight.offline).toBeCloseTo(1, 3);
   });
 
   it("ignores a repeated seq and only bumps topologyVersion when the graph changes", () => {
