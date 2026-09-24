@@ -1,12 +1,12 @@
-/** Art direction from docs/PLAN.md section 2: deep teal water, violet-pink dusk, warm lanterns. */
+/** Stylised (Balanced/Simple) palette, matched to the Cinematic swamp: teal mist, near-black water, violet-pink dusk. */
 export const PALETTE = {
-  skyTop: 0x0b1030,
-  skyMid: 0x3b2a63,
-  skyHorizon: 0xe58aa6,
-  fog: 0x3a2d57,
+  skyTop: 0x0a0c1a,
+  skyMid: 0x2e2340,
+  skyHorizon: 0xd98a78,
+  fog: 0x22393a,
   sun: 0xffc9a3,
-  waterDeep: 0x07303a,
-  waterShallow: 0x15707a,
+  waterDeep: 0x041412,
+  waterShallow: 0x0e3b39,
   sand: 0xc9b48f,
   rock: 0x9a8fb0,
   lantern: 0xffb45e,

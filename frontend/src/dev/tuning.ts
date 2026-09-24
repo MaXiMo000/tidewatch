@@ -11,7 +11,7 @@ type NumKey = { [K in keyof Params]: Params[K] extends number ? K : never }[keyo
 const RANGES: Partial<Record<NumKey, [number, number, number]>> = {
   exposure: [0.2, 3, 0.01],
   sunElevationDeg: [-4, 30, 0.1],
-  sunAzimuthDeg: [0, 360, 1],
+  sunAzimuthDeg: [-90, 90, 1],
   cloudCover: [0, 1, 0.01],
   reflectionScale: [0.25, 1, 0.05],
   rippleStrength: [0, 0.6, 0.01],

@@ -7,25 +7,28 @@ import * as THREE from "three";
 import { TIER_SETTINGS, type Tier } from "../quality/tiers";
 import type { WorldModel } from "../scene/model";
 import { PALETTE, SUN_DIRECTION } from "../scene/palette";
+import { Silhouettes } from "../scene/silhouettes";
 import { Sky } from "../scene/sky";
 import { Water } from "../scene/water";
 import { World } from "../scene/world";
-import type { PathInfo, RenderPath } from "./path";
+import type { PathInfo, RenderPath, ViewBase } from "./path";
 
 export class StylisedPath implements RenderPath {
   readonly name = "stylised" as const;
-  readonly shot = { elevation: 0.34, distance: 0.9, targetY: 0.6 };
+  readonly shot = { elevation: 0.34, distance: 0.9, targetY: 0.6, sweep: 0 };
 
   private readonly scene = new THREE.Scene();
   private readonly sky: Sky;
   private readonly water: Water;
   private readonly world: World;
+  private readonly trees = new Silhouettes(120);
+  private treeCount = 0;
   private readonly fog = new THREE.FogExp2(PALETTE.fog, 0.0095);
   private reducedMotion = false;
 
   constructor(
     private readonly renderer: THREE.WebGLRenderer,
-    model: WorldModel,
+    private readonly model: WorldModel,
     tier: Tier,
   ) {
     this.scene.fog = this.fog;
@@ -37,7 +40,7 @@ export class StylisedPath implements RenderPath {
     this.sky = new Sky(TIER_SETTINGS[tier].skyBands);
     this.water = new Water(TIER_SETTINGS[tier].waterDetail);
     this.world = new World(model);
-    this.scene.add(this.sky.mesh, this.water.mesh, this.world.root);
+    this.scene.add(this.sky.mesh, this.water.mesh, this.world.root, this.trees.mesh);
     this.applyTier(tier);
   }
 
@@ -51,16 +54,20 @@ export class StylisedPath implements RenderPath {
     this.water.setDetail(t.waterDetail);
     this.sky.setBands(t.skyBands);
     this.world.setGlow(t.glowSprites);
+    this.treeCount = t.silhouettes;
   }
 
   resize(): void {
     // Nothing tier-sized to reallocate: no render targets on this path.
   }
 
-  frame(dt: number, seconds: number, camera: THREE.PerspectiveCamera): void {
+  frame(dt: number, seconds: number, camera: THREE.PerspectiveCamera, view: ViewBase): void {
     void dt;
     this.renderer.toneMapping = THREE.NoToneMapping;
     this.world.update(seconds);
+    // Outside the orbit radius (camera distance ~ radius / tan(fov/2)), so trees never block islands.
+    const orbit = camera.position.distanceTo(view.target);
+    this.trees.update(this.model, orbit, this.treeCount);
     this.water.tick(this.reducedMotion ? seconds * 0.25 : seconds, camera);
     this.sky.tick(seconds, camera);
     this.renderer.setRenderTarget(null);
@@ -74,6 +81,7 @@ export class StylisedPath implements RenderPath {
 
   dispose(): void {
     this.world.dispose();
+    this.trees.dispose();
     this.scene.traverse((o) => {
       if (o instanceof THREE.Mesh) {
         o.geometry.dispose();

@@ -298,12 +298,17 @@ function frame(now: number): void {
   model.sync(store.latest);
   if (model.topologyVersion !== lastTopology) {
     lastTopology = model.topologyVersion;
-    rig.frame(model.bounds.cx, model.bounds.cz, model.bounds.radius);
+    rig.frame(
+      model.bounds.cx,
+      model.bounds.cz,
+      model.bounds.radius,
+      [...model.islands.values()].map((i) => ({ x: i.place.x, z: i.place.z })),
+    );
   }
   model.tick(dt);
   rig.tick(dt);
   renderer.info.reset();
-  path.frame(dt, (now - start) / 1000, rig.camera);
+  path.frame(dt, (now - start) / 1000, rig.camera, rig.base);
 
   // Screenshot/E2E readiness: the intended path has drawn a few frames with live data.
   if (path.name !== lastPathName) {

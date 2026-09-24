@@ -25,6 +25,8 @@ export interface TierSettings {
   readonly skyBands: number;
   /** Additive glow sprites over islands. */
   readonly glowSprites: boolean;
+  /** Silhouette trees around the archipelago (stylised path; Cinematic has its own foliage). */
+  readonly silhouettes: number;
   /** Request particles (M3). Kept here so the whole budget lives in one table. */
   readonly particles: number;
   /** Antialiasing is requested at context creation; changing it needs a new context. */
@@ -38,6 +40,7 @@ export const TIER_SETTINGS: Readonly<Record<Tier, TierSettings>> = {
     waterDetail: true,
     skyBands: 3,
     glowSprites: true,
+    silhouettes: 110,
     particles: 2000,
     antialias: true,
   },
@@ -47,6 +50,7 @@ export const TIER_SETTINGS: Readonly<Record<Tier, TierSettings>> = {
     waterDetail: true,
     skyBands: 1,
     glowSprites: true,
+    silhouettes: 90,
     particles: 800,
     antialias: false,
   },
@@ -56,6 +60,7 @@ export const TIER_SETTINGS: Readonly<Record<Tier, TierSettings>> = {
     waterDetail: false,
     skyBands: 1,
     glowSprites: false,
+    silhouettes: 30,
     particles: 250,
     antialias: false,
   },

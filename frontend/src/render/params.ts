@@ -7,7 +7,8 @@ export const params = {
   // light + sky
   exposure: 0.8,
   sunElevationDeg: 2.5,
-  sunAzimuthDeg: 168,
+  // Relative to the camera's base view direction: the glint column always faces the viewer.
+  sunAzimuthDeg: 9,
   skyZenith: 0x06070f,
   skyMid: 0x3a2740,
   skyHorizon: 0xe79a80,

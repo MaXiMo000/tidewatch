@@ -69,7 +69,7 @@ export class Water {
         {
           uDeep: { value: new THREE.Color(PALETTE.waterDeep) },
           uShallow: { value: new THREE.Color(PALETTE.waterShallow) },
-          uSky: { value: new THREE.Color(PALETTE.skyHorizon).lerp(new THREE.Color(PALETTE.fog), 0.45) },
+          uSky: { value: new THREE.Color(PALETTE.skyHorizon).lerp(new THREE.Color(PALETTE.fog), 0.8) },
           uSun: { value: new THREE.Color(PALETTE.sun) },
           uSunDir: {
             value: new THREE.Vector3(SUN_DIRECTION.x, SUN_DIRECTION.y, SUN_DIRECTION.z).normalize(),

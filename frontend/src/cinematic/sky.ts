@@ -78,9 +78,15 @@ void main() {
 }
 `;
 
+/** Azimuth of the camera's base view; the sun is placed relative to it (see params). */
+let viewAzimuth = 0;
+export function setViewAzimuth(radians: number): void {
+  viewAzimuth = radians;
+}
+
 export function sunDirection(target: THREE.Vector3): THREE.Vector3 {
   const el = THREE.MathUtils.degToRad(params.sunElevationDeg);
-  const az = THREE.MathUtils.degToRad(params.sunAzimuthDeg);
+  const az = viewAzimuth + THREE.MathUtils.degToRad(params.sunAzimuthDeg);
   return target.set(Math.cos(el) * Math.sin(az), Math.sin(el), Math.cos(el) * Math.cos(az));
 }
 

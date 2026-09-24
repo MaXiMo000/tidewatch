@@ -8,12 +8,14 @@
  */
 import * as THREE from "three";
 import { params } from "../render/params";
-import type { PathInfo, RenderPath } from "../render/path";
+import type { PathInfo, RenderPath, ViewBase } from "../render/path";
 import type { Tier } from "../quality/tiers";
 import type { WorldModel } from "../scene/model";
 import { makeWaterNormalMap } from "./noise";
+import { Foliage } from "./foliage";
+import { Islands } from "./islands";
 import { CinematicPost } from "./post";
-import { CinematicSky, sunDirection } from "./sky";
+import { CinematicSky, setViewAzimuth, sunDirection } from "./sky";
 import { CinematicWater } from "./water";
 
 export type Progress = (fraction: number, label: string) => void;
@@ -22,7 +24,7 @@ const nextFrame = (): Promise<void> => new Promise((r) => requestAnimationFrame(
 
 class CinematicPath implements RenderPath {
   readonly name = "cinematic" as const;
-  readonly shot = { elevation: 0.12, distance: 0.72, targetY: 1.2 };
+  readonly shot = { elevation: 0.1, distance: 0.6, targetY: 1.4, sweep: 0.28 };
 
   private readonly scene = new THREE.Scene();
   private readonly envScene = new THREE.Scene();
@@ -38,6 +40,8 @@ class CinematicPath implements RenderPath {
   private envKey = "";
   private readonly sunDir = new THREE.Vector3();
   private readonly normalMap: THREE.DataTexture;
+  private readonly islands = new Islands();
+  private readonly foliage = new Foliage();
 
   constructor(
     private readonly renderer: THREE.WebGLRenderer,
@@ -50,6 +54,15 @@ class CinematicPath implements RenderPath {
     this.water = new CinematicWater(this.normalMap);
     this.scene.fog = this.fog;
     this.scene.add(this.sky.mesh, this.water.mesh, this.sun, this.sun.target, this.hemi);
+    this.scene.add(this.islands.root, this.foliage.root);
+    // One soft shadow cascade over the archipelago (islets and structures cast and receive).
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    this.sun.castShadow = true;
+    this.sun.shadow.mapSize.set(2048, 2048);
+    this.sun.shadow.bias = -0.0004;
+    this.sun.shadow.normalBias = 0.03;
+    this.sun.shadow.radius = 4;
     this.pmrem = new THREE.PMREMGenerator(renderer);
   }
 
@@ -69,7 +82,8 @@ class CinematicPath implements RenderPath {
 
   /** Re-renders the PMREM environment when the sky parameters change (dev tuning), never per frame. */
   private refreshEnvironment(): void {
-    const key = `${params.sunElevationDeg}|${params.sunAzimuthDeg}|${params.skyHorizon}|${params.skyMid}|${params.skyZenith}|${params.cloudCover}`;
+    sunDirection(this.sunDir);
+    const key = `${this.sunDir.x.toFixed(3)}|${this.sunDir.z.toFixed(3)}|${params.sunElevationDeg}|${params.skyHorizon}|${params.skyMid}|${params.skyZenith}|${params.cloudCover}`;
     if (key === this.envKey) return;
     this.envKey = key;
     this.envSky.mesh.position.set(0, 0, 0);
@@ -94,13 +108,26 @@ class CinematicPath implements RenderPath {
     this.water.resize(Math.round(width * pr), Math.round(height * pr));
   }
 
-  frame(dt: number, seconds: number, camera: THREE.PerspectiveCamera): void {
+  frame(dt: number, seconds: number, camera: THREE.PerspectiveCamera, view: ViewBase): void {
     void dt;
     const t = this.reducedMotion ? seconds * 0.3 : seconds;
+    setViewAzimuth(Math.atan2(view.target.x - view.eye.x, view.target.z - view.eye.z));
     sunDirection(this.sunDir);
     this.refreshEnvironment();
-    this.sun.position.copy(this.sunDir).multiplyScalar(80).add(camera.position);
-    this.sun.target.position.copy(camera.position);
+    this.islands.update(this.model, view.eye);
+    this.foliage.update(this.model, view);
+    this.foliage.tick(t, this.reducedMotion);
+    // Shadow frustum fitted to the archipelago, lit from the low sun (raised a little so shadows
+    // stay short enough to read).
+    const b = this.model.bounds;
+    this.sun.target.position.set(b.cx, 0, b.cz);
+    this.sun.position.set(b.cx + this.sunDir.x * 60, Math.max(this.sunDir.y * 60, 14), b.cz + this.sunDir.z * 60);
+    const sc = this.sun.shadow.camera;
+    sc.left = sc.bottom = -(b.radius + 4);
+    sc.right = sc.top = b.radius + 4;
+    sc.near = 1;
+    sc.far = 160;
+    sc.updateProjectionMatrix();
     this.sky.tick(t, this.model.storm, camera);
     this.water.tick(t, camera);
     this.post.updateFog(this.model.latency, this.sunDir, t, camera);
@@ -129,6 +156,9 @@ class CinematicPath implements RenderPath {
   }
 
   dispose(): void {
+    this.renderer.shadowMap.enabled = false;
+    this.islands.dispose();
+    this.foliage.dispose();
     this.post.dispose();
     this.water.dispose();
     this.envTarget?.dispose();
