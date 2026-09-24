@@ -20,5 +20,9 @@ All notable changes. Versions follow [Semantic Versioning](https://semver.org/).
 - **M1 + art pass:** three quality tiers (Cinematic, Balanced, Simple) with an FPS governor.
 - **M0:** hardened FastAPI WebSocket backend, strict schemas, compose stack, CI.
 
+### Changed
+- Islands are batched per material across the whole archipelago: draw calls no longer grow with
+  the number of services (41 services on Simple: 121 -> 9 calls).
+
 ### Fixed
 - Caddy now answers TLS clients that send no SNI for `localhost` (found by the ZAP scan).
