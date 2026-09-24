@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import logging
 from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
 
@@ -224,4 +225,6 @@ async def _safe_close(ws: WebSocket, code: int) -> None:
 
 
 def get_app() -> FastAPI:  # pragma: no cover - uvicorn factory entrypoint
+    # uvicorn configures only its own loggers; this makes app logs (live source outcomes) visible.
+    logging.basicConfig(level=logging.INFO, format="%(levelname)s:     %(name)s %(message)s")
     return create_app()

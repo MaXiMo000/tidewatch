@@ -1,0 +1,54 @@
+# Render variant of deploy/Caddyfile: same headers and CSP, plain HTTP on $PORT because Render's
+# proxy terminates TLS (HSTS is still sent: the public URL is always https).
+{
+	auto_https off
+	admin off
+	servers {
+		# Render's proxy connects from a private address and appends the real client to
+		# X-Forwarded-For. Strict mode takes the RIGHTMOST untrusted entry, so values a client
+		# puts in the header itself are ignored. Override the range if Render's differs.
+		trusted_proxies static {$TIDEWATCH_TRUSTED_PROXIES:private_ranges}
+		trusted_proxies_strict
+		client_ip_headers X-Forwarded-For
+	}
+}
+
+:{$PORT:10000} {
+	encode zstd gzip
+
+	header {
+		Strict-Transport-Security "max-age=63072000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "no-referrer"
+		Cross-Origin-Opener-Policy "same-origin"
+		Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=()"
+		-Server
+		-Via
+	}
+
+	# uvicorn (--forwarded-allow-ips=127.0.0.1) takes the leftmost X-Forwarded-For value, so it
+	# must receive exactly ONE: the client IP Caddy derived above. Never pass the raw chain.
+	handle /api/* {
+		reverse_proxy 127.0.0.1:8000 {
+			header_up X-Forwarded-For {client_ip}
+		}
+	}
+	handle /ws/* {
+		reverse_proxy 127.0.0.1:8000 {
+			header_up X-Forwarded-For {client_ip}
+		}
+	}
+	# Render's health check may use an internal Host; liveness carries no data, so send the
+	# public one (the backend's TrustedHost allowlist stays exact for every other route).
+	handle /healthz {
+		reverse_proxy 127.0.0.1:8000 {
+			header_up Host {$TIDEWATCH_PUBLIC_HOST}
+		}
+	}
+	handle {
+		header Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self' wss://{$TIDEWATCH_PUBLIC_HOST}; worker-src 'self' blob:; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'; upgrade-insecure-requests"
+		root * /srv
+		try_files {path} /index.html
+		file_server
+	}
+}
