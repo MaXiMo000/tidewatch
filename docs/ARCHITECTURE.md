@@ -234,4 +234,7 @@ cannot be spoofed by prepending entries (`scripts/smoke_render.py`, CI). Free pl
   runner's installed Chrome: zero CSP violations/console errors, live data, a rendered canvas on
   every tier, keyboard tier control, reduced motion. Bundle budget checked in CI. Visual regression
   on chapter keyframes in M2; Lighthouse budget in M6.
-- **Security:** ZAP baseline in CI (M6); CSP violations reported to a log endpoint in report-only phase.
+- **Security (M6, CI `compose` job):** ZAP baseline against the running stack (`scripts/zap_gate.py`
+  fails on medium/high), k6 WebSocket load (`scripts/load/ws.js`: caps, 429s, memory), Trusted Types
+  enforced in the CSP and exercised by every E2E test, performance budget test (Navigation/Resource/
+  Paint Timing), gitleaks over full history, CodeQL. Releases: SBOM + provenance (`release.yml`).

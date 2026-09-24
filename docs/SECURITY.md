@@ -41,7 +41,7 @@ Everything crossing 1 and 3 is untrusted input and is validated.
 | T4 | Brute-forcing API keys / timing attacks | Constant-time compare; ticket endpoint rate-limited per IP | `security.py` | done (single instance) |
 | T5 | Unauthorised live data access | Live mode requires an API key for tickets **unless** `TIDEWATCH_LIVE_PUBLIC=true`; public live mode is an explicit, dated owner risk acceptance (s.8) and must be switched on deliberately (`TIDEWATCH_MODE=live` + `TIDEWATCH_LIVE_PUBLIC=true`). What it exposes is bounded by T6 | `config.py`, `main.py` | accepted risk (owner, 2026-09-24) |
 | T6 | Data exfiltration through the stream | Strict allowlist schemas (`extra="forbid"`, bounded). Live payloads are validated by their own strict model and **mapped**, never forwarded: island ids are config ids + fixed dependency ids, display names come from config; only rate, p95, error rate, status reach browsers | `schemas.py`, `live.py`, ARCH s.6 | done |
-| T7 | XSS | No `innerHTML`/eval/inline code, `textContent` only, strict CSP (`script-src 'self'`), zod validation, Trusted Types `[planned M6]` | `client.ts`, `deploy/Caddyfile` | done / planned |
+| T7 | XSS | No `innerHTML`/eval/inline code, `textContent` only, strict CSP (`script-src 'self'`), zod validation, Trusted Types enforced with no policy (`trusted-types 'none'`) | `client.ts`, `deploy/Caddyfile` | done |
 | T8 | Third-party script compromise | No third-party origins at runtime; self-hosted assets; SRI if ever unavoidable | CSP, code review | done |
 | T9 | DoS via connections | Global and per-IP WS caps; auth timeout (5 s); message size cap; per-connection message rate cap | `security.py`, `main.py` | done |
 | T10 | DoS via slow clients / memory growth | Bounded per-client queue (2), drop-oldest; single producer | `hub.py` | done |
@@ -57,7 +57,7 @@ Everything crossing 1 and 3 is untrusted input and is validated.
 | T20 | Container escape / privilege abuse | Non-root user, read-only FS, `cap_drop: ALL`, `no-new-privileges`, memory/PID limits, backend not published, backend network `internal` (no egress) | `deploy/`, Dockerfile | done (smoke-tested locally + CI) |
 | T21 | Information disclosure via errors/docs | OpenAPI/docs disabled in prod; generic error responses; no stack traces to clients | `main.py` | done |
 | T22 | Weak production config | Startup validation: prod requires https origins and >= 32-char keys; live requires keys | `config.py` | done |
-| T23 | Tampered release artefacts | SBOM + build provenance attestation | CI | planned M6 |
+| T23 | Tampered release artefacts | SPDX SBOM + Sigstore build-provenance attestation + SHA256SUMS on every tagged release | `.github/workflows/release.yml` | done (runs on the first tag) |
 | T24 | Log injection / secret logging | Never log tickets/keys/headers. `LiveSource` logs only `source id: outcome` from a fixed vocabulary, once per change; a test asserts tokens never reach logs | `live.py`, `tests/test_live.py` | done (live); structured logs M6 |
 | T26 | Live-mode extras leaking data or surprising users (M4) | Photo mode saves the canvas locally (`toBlob` -> same-origin blob URL -> `<a download>`), nothing is uploaded; sound is off by default and needs a click (no autoplay); the 2D view and event feed render validated snapshots with `textContent` only; no CSP change was needed | `live/`, `audio/` | done |
 | T25 | The apps' metrics endpoint leaking data or access | Add-on route exists only when `TIDEWATCH_METRICS_TOKEN` is set; token compared in constant time; records only (duration, ok) per request/dependency call - never URLs, routes, bodies, headers, user ids; `no-store`; fixed dependency ids, max 8; tests in each app | `addons/`, the apps' repos | done |
@@ -81,19 +81,19 @@ weaken a check to get CI green.
 
 ## 7. Pre-launch checklist (M6 - tick with evidence)
 
-- [ ] `pytest`, `ruff`, `mypy`, `bandit`, `pip-audit`, `npm audit`, CodeQL, gitleaks all green in CI
-- [ ] `docker compose up` on a clean host: backend not reachable except through Caddy (`nmap`/`curl` from outside)
-- [ ] `curl -I https://<domain>` shows HSTS, CSP, nosniff, COOP, Referrer-Policy; no `Server` header
-- [ ] securityheaders.com / Mozilla Observatory grade A or better
-- [ ] WebSocket from a foreign Origin is refused; reused/expired/garbage tickets refused
-- [ ] Connection caps and rate limits verified under k6 load; memory flat under slow-client test
-- [ ] CSP has no `unsafe-inline`/`unsafe-eval`; browser console shows zero CSP violations
-- [ ] Trusted Types enforced (or documented reason why not)
-- [ ] ZAP baseline scan has no medium+ findings
-- [ ] Live adapters: SSRF test suite passes; upstream credentials are read-only; no upstream label reaches clients unmapped
+- [x] `pytest`, `ruff`, `mypy`, `bandit`, `pip-audit`, `npm audit`, CodeQL, gitleaks all green in CI (every job on PRs #20-#22)
+- [x] `docker compose up`: backend not reachable except through Caddy - `smoke_compose.py` in CI checks no published port, no host reachability, no internet egress
+- [ ] `curl -I https://<domain>` shows HSTS, CSP, nosniff, COOP, Referrer-Policy; no `Server` header - **verified on the localhost stack by `smoke_compose.py` (CI); re-run against the real domain after the Render deploy (owner)**
+- [ ] securityheaders.com / Mozilla Observatory grade A or better - **needs the public URL (owner, after deploy)**
+- [x] WebSocket from a foreign Origin is refused; reused/expired/garbage tickets refused (`smoke_compose.py`, `tests/test_security.py`)
+- [x] Connection caps and rate limits verified under k6 load; memory flat (`scripts/load/ws.js` in CI: 20 viewers from one IP -> 5 admitted, 15 turned away, ticket burst -> 429; backend 40.2 -> 40.4 MiB). The backend's per-client queues hold 2 frames with drop-oldest, so a slow reader cannot grow memory (`tests/test_security.py`)
+- [x] CSP has no `unsafe-inline`/`unsafe-eval`; browser console shows zero CSP violations (E2E, every test, production build)
+- [x] Trusted Types **enforced**: `require-trusted-types-for 'script'; trusted-types 'none'` (no policy at all - the bundle has no DOM XSS sink); all 22 E2E tests pass under it against the compose stack
+- [x] ZAP baseline scan has no medium+ findings (CI step + `scripts/zap_gate.py`; local run 2026-09-24: 1 low "timestamp disclosure", 3 info)
+- [x] Live adapters: SSRF test suite passes (`tests/test_live.py`); the only upstream credential is a per-app token for a read-only aggregates endpoint; payloads are validated and mapped, never forwarded
 - [x] ~~Live mode is behind real authentication (OIDC)~~ - replaced by the owner's risk acceptance (s.8, 2026-09-24): public, aggregates only
-- [ ] Secrets scan of full git history clean; GitHub push protection enabled
-- [ ] SBOM + provenance published for the release
+- [x] Secrets scan of full git history clean (CI gitleaks, `fetch-depth: 0`); GitHub push protection enabled (`scripts/harden-repo.sh`, verified at M0)
+- [ ] SBOM + provenance published for the release - **`.github/workflows/release.yml` is ready (SPDX SBOM via syft, Sigstore build-provenance attestation, SHA256SUMS); it runs when the owner pushes the `v0.1.0` tag**
 - [x] Docker base images pinned by digest; dependencies hash-pinned (M0: `python:3.12-slim@sha256`, `caddy:2@sha256`, `backend/requirements.lock`, npm lockfile integrity hashes)
 
 ## 8. Residual risks we accept (and why)

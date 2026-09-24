@@ -1,5 +1,11 @@
 # Single public origin: static frontend + reverse proxy to the private backend.
 # One origin => no CORS, no cross-site tokens. TLS is automatic (Let's Encrypt; local CA for localhost).
+{
+	# Clients that send no SNI (Java/ZAP never sends it for a dotless host like "localhost") get
+	# this site's certificate instead of a failed handshake. Only one site is served anyway.
+	default_sni {$TIDEWATCH_DOMAIN:localhost}
+}
+
 {$TIDEWATCH_DOMAIN:localhost} {
 	encode zstd gzip
 
@@ -23,8 +29,9 @@
 	}
 	handle {
 		# Strict CSP: no inline script/style, no third-party origins. WebGL needs no 'unsafe-eval'.
-		# style-src 'self' is fine for GSAP/three (they use CSSOM, not style attributes in markup).
-		header Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self' wss://{$TIDEWATCH_DOMAIN:localhost}; worker-src 'self' blob:; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'; upgrade-insecure-requests"
+		# style-src 'self' is fine for three (it uses CSSOM, not style attributes in markup).
+		# Trusted Types enforced with no policy at all: nothing may pass a string to a DOM XSS sink.
+		header Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self' wss://{$TIDEWATCH_DOMAIN:localhost}; worker-src 'self' blob:; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types 'none'; upgrade-insecure-requests"
 		root * /srv
 		try_files {path} /index.html
 		file_server

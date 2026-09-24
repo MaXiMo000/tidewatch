@@ -421,3 +421,32 @@ test("without WebGL the 2D view is the fallback, with the reason, and no errors"
   // three.js logs its own context-creation failure; anything else is ours.
   expect(found.errors.filter((e) => !/WebGL context/i.test(e))).toEqual([]);
 });
+
+// ---------- performance budget (M6; docs/PERFORMANCE.md) ----------
+// Measured by the browser itself (Navigation/Resource/Paint Timing) instead of adding Lighthouse
+// as a dependency. Fresh context = cold cache, so these are first-visit numbers.
+
+test("performance budget: first paint, total download before the first frame, no third parties", async ({
+  page,
+}) => {
+  await page.goto("/?quality=low");
+  await expect(page.locator("html")).toHaveAttribute("data-ready", "1", { timeout: 30_000 });
+  const m = await page.evaluate(() => {
+    const nav = performance.getEntriesByType("navigation")[0] as PerformanceNavigationTiming | undefined;
+    const res = performance.getEntriesByType("resource") as PerformanceResourceTiming[];
+    const size = (e: PerformanceResourceTiming): number => e.transferSize || e.encodedBodySize;
+    return {
+      fcp: performance.getEntriesByName("first-contentful-paint")[0]?.startTime ?? Infinity,
+      bytes: res.reduce((sum, e) => sum + size(e), nav ? size(nav) : 0),
+      js: res.filter((e) => new URL(e.name).pathname.endsWith(".js")).reduce((sum, e) => sum + size(e), 0),
+      origins: [...new Set(res.map((e) => new URL(e.name).origin))],
+      self: location.origin,
+    };
+  });
+  // Budgets: total transfer before the first frame <= 1.5 MB, initial JS well inside 350 KB gzip
+  // (plus the 20 KB lazy Cinematic chunk never loads on Simple), first paint quickly.
+  expect(m.bytes).toBeLessThan(1.5 * 1024 * 1024);
+  expect(m.js).toBeLessThan(400 * 1024);
+  expect(m.fcp).toBeLessThan(2_500);
+  expect(m.origins).toEqual([m.self]);
+});

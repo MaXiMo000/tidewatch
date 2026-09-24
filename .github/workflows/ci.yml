@@ -99,6 +99,35 @@ jobs:
           E2E_BASE_URL: https://localhost
           E2E_CHANNEL: chrome
         run: npm run e2e
+      # docs/SECURITY.md s.7: connection caps and rate limits under load, memory flat. 20 viewers
+      # from one IP: at most TIDEWATCH_WS_MAX_PER_IP (5) admitted, the rest turned away; a ticket
+      # burst gets 429. Thresholds live in the script; memory growth is checked around it.
+      - name: WebSocket load test (k6)
+        run: |
+          mem() { docker stats --no-stream --format '{{.MemUsage}}' tidewatch-backend-1 | cut -d/ -f1; }
+          before=$(mem)
+          docker run --rm --network host -e BASE=https://localhost -v "$PWD/scripts/load:/load:ro" \
+            grafana/k6@sha256:e66db15b860113878fa74670e31f5e274830b7b6e42c8bff28b2f2d86a257603 \
+            run --quiet --insecure-skip-tls-verify /load/ws.js
+          after=$(mem)
+          python3 - "$before" "$after" <<'PY'
+          import re, sys
+          def mib(v):
+              n, unit = re.match(r"([\d.]+)\s*([KMG]i?B)", v.strip()).groups()
+              return float(n) * {"KiB": 1 / 1024, "MiB": 1, "GiB": 1024, "kB": 1 / 1000, "MB": 1, "GB": 1000}[unit]
+          before, after = mib(sys.argv[1]), mib(sys.argv[2])
+          print(f"backend memory {before:.1f} MiB -> {after:.1f} MiB")
+          sys.exit(1 if after - before > 25 else 0)
+          PY
+      # docs/SECURITY.md s.7: ZAP baseline (passive) against the running stack; any medium or high
+      # alert fails the build (scripts/zap_gate.py), low/info are printed for the record.
+      - name: ZAP baseline scan
+        run: |
+          mkdir -p zap && chmod 777 zap
+          docker run --rm --network host -v "$PWD/zap:/zap/wrk:rw" \
+            ghcr.io/zaproxy/zaproxy:stable@sha256:781a2bdaea47324e7bab583e2263f21d257b0aee61ed51521a5be45f5f5081ef \
+            zap-baseline.py -t https://localhost -m 2 -I -J zap.json
+          python3 scripts/zap_gate.py zap/zap.json
       # The Render image (deploy/render): Caddy + uvicorn in one container on plain HTTP, in live
       # mode with apps that cannot resolve (they must show offline). Also checks that client IPs
       # come from X-Forwarded-For the way Render sends it and cannot be spoofed.
