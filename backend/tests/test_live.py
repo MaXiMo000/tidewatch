@@ -122,6 +122,21 @@ def test_thresholds_follow_demo_rules() -> None:
     assert services["blog"][3] == "degraded"
 
 
+def test_third_party_dependencies_are_judged_by_errors_only() -> None:
+    body = {
+        **PAYLOAD,
+        "deps": [
+            {"id": "ai", "kind": "service", "count": 10, "errors": 0, "p95_ms": 9000},
+            {"id": "api", "kind": "service", "count": 10, "errors": 1, "p95_ms": 50},
+            {"id": "db", "kind": "database", "count": 10, "errors": 0, "p95_ms": 9000},
+        ],
+    }
+    services = by_id(poll(source(lambda _request: reply(body=body))))
+    assert services["shop-ai"][3] == "ok"  # 9 s LLM call: slow, not broken
+    assert services["shop-api"][3] == "failing"  # 10% errors
+    assert services["shop-db"][3] == "failing"  # a 9 s database is broken
+
+
 DEP = PAYLOAD["deps"][0]  # type: ignore[index]
 
 

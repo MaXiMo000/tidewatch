@@ -112,7 +112,9 @@ def _is_public(ip: str) -> bool:
     return addr.is_global and not addr.is_multicast
 
 
-def _island(sid: str, kind: Kind, t: Totals | None, window_s: int) -> ServiceMetrics:
+def _island(
+    sid: str, kind: Kind, t: Totals | None, window_s: int, *, judge_latency: bool = True
+) -> ServiceMetrics:
     if t is None:
         return ServiceMetrics(id=sid, kind=kind, rps=0, p95_ms=0, error_rate=0, status="offline")
     err = t.errors / t.count if t.count else 0.0
@@ -122,7 +124,7 @@ def _island(sid: str, kind: Kind, t: Totals | None, window_s: int) -> ServiceMet
         rps=round(min(t.count / window_s, _MAX_RPS), 2),
         p95_ms=round(t.p95_ms, 1),
         error_rate=round(err, 4),
-        status=status_for(t.p95_ms, err),
+        status=status_for(t.p95_ms if judge_latency else 0.0, err),
     )
 
 
@@ -231,7 +233,16 @@ class LiveSource:
             services.append(app)
             edges.append(Edge(src=GATEWAY_ID, dst=src.id, rps=app.rps))
             for dep in known.deps if known else []:
-                island = _island(f"{src.id}-{dep.id}", dep.kind, dep if fresh else None, window)
+                # Third-party APIs (an LLM, an anime API) are slow by nature - seconds per call
+                # is normal, not an incident - so their status comes from errors alone. Their
+                # p95 is still shown. The app's own HTTP and its infrastructure keep both rules.
+                island = _island(
+                    f"{src.id}-{dep.id}",
+                    dep.kind,
+                    dep if fresh else None,
+                    window,
+                    judge_latency=dep.kind != "service",
+                )
                 services.append(island)
                 edges.append(Edge(src=src.id, dst=island.id, rps=island.rps))
         total = min(sum(e.rps for e in edges if e.src == GATEWAY_ID), _MAX_RPS)
