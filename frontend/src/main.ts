@@ -25,6 +25,7 @@ import { StylisedPath } from "./render/stylised";
 import { Beacon } from "./scene/beacon";
 import { CameraRig } from "./scene/camera";
 import { WorldModel } from "./scene/model";
+import { Shake } from "./scene/weather-rules";
 import {
   liveWeight,
   makePlan,
@@ -136,6 +137,9 @@ let plan: StoryPlan | null = null;
 const planFor = { topology: -1, path: "", eyeX: NaN, eyeZ: NaN };
 const shot: Pose = { eye: { x: 0, y: 0, z: 0 }, target: { x: 0, y: 0, z: 0 } };
 const requestPos: Vec3 = { x: 0, y: 0, z: 0 };
+const shake = new Shake();
+const shakeOffset: Vec3 = { x: 0, y: 0, z: 0 };
+let seenFailures = 0;
 /** Scroll progress eased toward the real scroll position, so wheel steps glide instead of jump. */
 let filmP = storyUi.progress();
 const governor = new FpsGovernor(detected, performance.now());
@@ -405,6 +409,13 @@ function frame(now: number): void {
     storyPose(filmP, plan, reduced ? 0 : seconds, shot, path.name === "cinematic" ? rig.base : null);
     rig.applyStory(shot, live);
   }
+  // A service just started failing: a short shake (never under reduced motion, <= 1 per 2.5 s).
+  if (model.failureEvents !== seenFailures) {
+    seenFailures = model.failureEvents;
+    shake.kick(seconds, 0.8, reduced);
+  }
+  shake.offset(seconds, dt, shakeOffset);
+  rig.nudge(shakeOffset);
   const onScreen = plan !== null && requestAt(filmP, plan, requestPos);
   beacon.update(onScreen ? requestPos : null, dt, seconds, reduced);
   renderer.info.reset();

@@ -4,11 +4,16 @@
  * heading, bob and the fade in/out at the docks). CPU cost per frame: one uniform write. Boat
  * count per channel follows its request rate; rebuilt only when topology or rates change bucket.
  * Shared by every tier (Cinematic adds wakes: cinematic/boats.ts).
+ *
+ * Errors sink boats (M3): each boat carries its destination's sink share (weather-rules.ts
+ * sinkShare(errorRate)); on each lap a boat whose per-lap hash falls under it settles, tilts and
+ * goes down over the last part of the channel instead of docking. Deterministic, all on the GPU.
  */
 import * as THREE from "three";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import type { WorldModel } from "./model";
 import { mulberry32 } from "./random";
+import { sinkShare } from "./weather-rules";
 
 const MAX_BOATS = 96;
 const SPEED = 1.6; // world units per second
@@ -70,8 +75,11 @@ export class Boats {
   readonly mesh: THREE.InstancedMesh;
   readonly routes: THREE.InstancedBufferAttribute;
   readonly params: THREE.InstancedBufferAttribute;
+  readonly sink: THREE.InstancedBufferAttribute;
   readonly time = { value: 0 };
   private key = "";
+  /** Destination island of each boat, for the sink share. */
+  private dest: string[] = [];
 
   constructor() {
     const geometry = boatGeometry();
@@ -79,11 +87,14 @@ export class Boats {
     this.params = new THREE.InstancedBufferAttribute(new Float32Array(MAX_BOATS * 4), 4);
     geometry.setAttribute("aRoute", this.routes);
     geometry.setAttribute("aParams", this.params);
+    this.sink = new THREE.InstancedBufferAttribute(new Float32Array(MAX_BOATS), 1);
+    this.sink.setUsage(THREE.DynamicDrawUsage);
+    geometry.setAttribute("aSink", this.sink);
     const material = new THREE.MeshStandardMaterial({ color: 0x3a2e26, roughness: 0.8 });
     material.onBeforeCompile = (shader) => {
       shader.uniforms["uTime"] = this.time;
       shader.vertexShader = shader.vertexShader
-        .replace("#include <common>", `#include <common>\n${BOAT_PATH}\nattribute float aGlow;\nvarying float vGlow;`)
+        .replace("#include <common>", `#include <common>\n${BOAT_PATH}\nattribute float aGlow;\nattribute float aSink;\nvarying float vGlow;`)
         .replace(
           "#include <beginnormal_vertex>",
           /* glsl */ `
@@ -97,7 +108,15 @@ export class Boats {
           "#include <begin_vertex>",
           /* glsl */ `
           float bob = sin(uTime * 2.1 + aParams.w * 7.0) * 0.025;
-          vec3 transformed = bRot * (position * 1.7 * bFade) + bPos + vec3(0.0, bob, 0.0);
+          // Sinking (errors): this lap's hash under the destination's sink share -> go down.
+          float bLap = floor(aParams.x + uTime * aParams.y);
+          float bT = fract(aParams.x + uTime * aParams.y);
+          float bSinks = step(fract(sin(bLap * 12.9898 + aParams.w * 78.233) * 43758.5453), aSink);
+          float bDown = bSinks * smoothstep(0.55, 0.9, bT);
+          bFade *= 1.0 - bDown * smoothstep(0.75, 0.93, bT);
+          float bTilt = bDown * 0.7;
+          mat3 bPitch = mat3(1.0, 0.0, 0.0, 0.0, cos(bTilt), sin(bTilt), 0.0, -sin(bTilt), cos(bTilt));
+          vec3 transformed = bRot * (bPitch * position * 1.7 * bFade) + bPos + vec3(0.0, bob - bDown * 0.7, 0.0);
           vGlow = aGlow;
           vFade = bFade;`,
         );
@@ -120,6 +139,20 @@ export class Boats {
 
   /** Rebuild routes when topology or a channel's rate bucket changes (not per frame). */
   update(model: WorldModel, budget: number): void {
+    this.rebuild(model, budget);
+    // Sink shares follow the destinations' error rates; written only when one really changes.
+    let dirty = false;
+    for (let i = 0; i < this.mesh.count; i++) {
+      const share = sinkShare(model.islands.get(this.dest[i] ?? "")?.errorRate ?? 0);
+      if (Math.abs(share - (this.sink.getX(i) ?? 0)) > 0.01) {
+        this.sink.setX(i, share);
+        dirty = true;
+      }
+    }
+    if (dirty) this.sink.needsUpdate = true;
+  }
+
+  private rebuild(model: WorldModel, budget: number): void {
     let maxRps = 1;
     for (const e of model.edges) maxRps = Math.max(maxRps, e.targetRps);
     // No traffic (e.g. to an offline app): an empty channel, no boats.
@@ -131,6 +164,7 @@ export class Boats {
     this.key = key;
     const rnd = mulberry32(0xb0a7 + model.topologyVersion);
     let n = 0;
+    this.dest = [];
     model.edges.forEach((e, i) => {
       const a = model.islands.get(e.src);
       const b = model.islands.get(e.dst);
@@ -153,11 +187,14 @@ export class Boats {
       for (let k = 0; k < count && n < MAX_BOATS; k++, n++) {
         this.routes.setXYZW(n, sx, sz, ex, ez);
         this.params.setXYZW(n, k / count + rnd() * 0.1, SPEED / travel, (rnd() - 0.5) * 0.6, rnd() * 6.28);
+        this.dest[n] = e.dst;
+        this.sink.setX(n, sinkShare(b.errorRate));
       }
     });
     this.mesh.count = n;
     this.routes.needsUpdate = true;
     this.params.needsUpdate = true;
+    this.sink.needsUpdate = true;
   }
 
   tick(seconds: number): void {

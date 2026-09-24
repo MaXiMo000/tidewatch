@@ -19,6 +19,7 @@ export class Channels {
   private builtVersion = -1;
   private readonly tmp = new THREE.Color();
   private readonly base = new THREE.Color(PALETTE.channel);
+  private readonly red = new THREE.Color(PALETTE.status.failing);
 
   constructor(private readonly model: WorldModel) {}
 
@@ -29,7 +30,9 @@ export class Channels {
     let max = 1;
     for (const e of this.model.edges) max = Math.max(max, e.rps);
     this.model.edges.forEach((e, i) => {
-      this.tmp.copy(this.base).multiplyScalar(0.25 + 0.75 * Math.sqrt(e.rps / max));
+      // Channels into a failing island run red (eased with its failing weight).
+      const failing = this.model.islands.get(e.dst)?.weight.failing ?? 0;
+      this.tmp.copy(this.base).lerp(this.red, failing * 0.85).multiplyScalar(0.25 + 0.75 * Math.sqrt(e.rps / max));
       attr.setXYZ(i * 2, this.tmp.r, this.tmp.g, this.tmp.b);
       attr.setXYZ(i * 2 + 1, this.tmp.r, this.tmp.g, this.tmp.b);
     });

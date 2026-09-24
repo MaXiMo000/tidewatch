@@ -770,11 +770,16 @@ html[data-chapter="live"] #live .chapter-card {
   opacity: 1;
 }
 
-/* The live card greets, then scrolls away: the live view needs the whole screen. */
+/* The live card greets, then scrolls away (and fades once settled): the live view needs the screen. */
 #live .chapter-card {
   position: relative;
   top: auto;
   margin-top: 26vh;
+}
+
+html[data-settled="1"] #live .chapter-card {
+  opacity: 0;
+  pointer-events: none;
 }
 
 .chapter-card h2 {

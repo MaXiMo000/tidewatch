@@ -89,11 +89,22 @@ foundations come before spectacle.
   - [ ] iOS Safari, Android Chrome, desktop Firefox - **not verified** (no devices/browsers here);
     only headless Chromium at desktop and 390x844 phone size.
 
-### M3 - Data-driven visuals (chapters 4-5)
-- `InstancedMesh` request particles with GPU vertex animation (CPU cost ~0 regardless of count).
-- Latency -> fog/storm; errors -> flash/shake/sinking; status colours; snapshot interpolation
-  (no popping between 1 Hz ticks).
-- **Accept:** driven purely by the WebSocket snapshot; incident cycle in demo mode is clearly legible.
+### M3 - Data-driven visuals (chapters 4-5) (built 2026-09-24)
+- [x] Requests as GPU-animated instanced boats (since the art pass; CPU cost: one uniform write).
+- [x] Latency -> fog density/colour + mist banks over each slow island (Balanced/Simple:
+  `scene/weather.ts`; Cinematic already had screen-space fog + storms in `cinematic/drama.ts`).
+- [x] Failing -> storm clouds over the island, darker lights, lightning (<= 1 per 2.5 s), channels
+  into it run red, a short camera shake when a service newly fails (<= 1 per 2.5 s).
+- [x] Errors -> boats sink on their way into the erroring island (share = 4x error rate, max 60%),
+  on every tier, entirely in the boat vertex shader.
+- [x] Snapshot interpolation: every visual reads the model's eased values (no popping at 1 Hz).
+- [x] Reduced motion: no lightning, no shake, no drifting mist.
+- **Accept:**
+  - [x] Driven purely by the WebSocket snapshot (rules are pure functions: `scene/weather-rules.ts`,
+    unit-tested incl. the flash-rate limit).
+  - [x] Demo incident legible: screenshots `docs/screenshots/m3/` (calm, degraded mist, failing storm,
+    the storm chapter close-up). Budgets hold over a full incident: Simple 26 calls / 8.4k tris,
+    Balanced 27 / 15k.
 
 ### M4 - Live mode
 - Free-fly camera (mouse/touch/WASD), click island -> metrics panel (sanitised, `textContent`),

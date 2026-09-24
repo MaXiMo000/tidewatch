@@ -6,6 +6,7 @@
  * the main bundle so the first frame never waits.
  *
  * Simple drops the glow billboards, water detail and most trees, and renders at 30 fps.
+ * Weather (M3, scene/weather.ts) is on every tier: latency fog, mist, storm clouds, lightning.
  */
 import * as THREE from "three";
 import { TIER_SETTINGS, type Tier } from "../quality/tiers";
@@ -16,8 +17,13 @@ import { PALETTE, SUN_DIRECTION } from "../scene/palette";
 import { Silhouettes } from "../scene/silhouettes";
 import { Sky } from "../scene/sky";
 import { Water } from "../scene/water";
+import { Weather } from "../scene/weather";
 import { Channels } from "../scene/world";
 import type { PathInfo, RenderPath, ViewBase } from "./path";
+
+const FOG_DENSITY = 0.0095;
+const HEMI = 1.25;
+const SUN = 1.5;
 
 export class StylisedPath implements RenderPath {
   readonly name = "stylised" as const;
@@ -32,7 +38,10 @@ export class StylisedPath implements RenderPath {
   private readonly trees = new Silhouettes(120);
   private treeCount = 0;
   private boatBudget = 40;
-  private readonly fog = new THREE.FogExp2(PALETTE.fog, 0.0095);
+  private readonly fog = new THREE.FogExp2(PALETTE.fog, FOG_DENSITY);
+  private readonly weather = new Weather();
+  private readonly hemi = new THREE.HemisphereLight(0xb7a3e6, 0x0b3a44, HEMI);
+  private readonly sun = new THREE.DirectionalLight(PALETTE.sun, SUN);
   private reducedMotion = false;
 
   constructor(
@@ -41,11 +50,10 @@ export class StylisedPath implements RenderPath {
     tier: Tier,
   ) {
     this.scene.fog = this.fog;
-    this.scene.add(new THREE.HemisphereLight(0xb7a3e6, 0x0b3a44, 1.25));
-    const sun = new THREE.DirectionalLight(PALETTE.sun, 1.5);
+    this.scene.add(this.hemi);
     // From the sun's side of the sky but higher than the visible sun, so islands read clearly.
-    sun.position.set(SUN_DIRECTION.x * 60, 30, SUN_DIRECTION.z * 60);
-    this.scene.add(sun);
+    this.sun.position.set(SUN_DIRECTION.x * 60, 30, SUN_DIRECTION.z * 60);
+    this.scene.add(this.sun);
     this.sky = new Sky(TIER_SETTINGS[tier].skyBands);
     this.water = new Water(TIER_SETTINGS[tier].waterDetail);
     this.channels = new Channels(model);
@@ -56,6 +64,7 @@ export class StylisedPath implements RenderPath {
       this.islands.root,
       this.boats.mesh,
       this.trees.mesh,
+      this.weather.mesh,
     );
     this.applyTier(tier);
   }
@@ -91,6 +100,11 @@ export class StylisedPath implements RenderPath {
     this.boats.update(this.model, this.boatBudget);
     this.boats.tick(t);
     this.channels.update();
+    // Weather from the data: fog/mist with latency, clouds + lightning over failing islands.
+    this.weather.update(this.model, this.fog, FOG_DENSITY, seconds, this.reducedMotion);
+    const storm = Math.min(1, this.model.storm * 1.5);
+    this.hemi.intensity = HEMI * (1 - storm * 0.35) + this.weather.flash * 2.2;
+    this.sun.intensity = SUN * (1 - storm * 0.5) + this.weather.flash * 1.5;
     // Outside the orbit radius (camera distance ~ radius / tan(fov/2)), so trees never block islands.
     // From the composition anchor, not the moving camera: the film's shots must not replant them.
     const orbit = view.eye.distanceTo(view.target);
@@ -111,6 +125,7 @@ export class StylisedPath implements RenderPath {
     this.boats.dispose();
     this.channels.dispose();
     this.trees.dispose();
+    this.weather.dispose();
     // A shared object (the film's beacon) belongs to main.ts: never dispose it here.
     if (this.attached?.parent === this.scene) this.scene.remove(this.attached);
     this.scene.traverse((o) => {
