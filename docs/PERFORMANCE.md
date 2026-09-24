@@ -38,6 +38,7 @@ mid-tier GPU) and test on real hardware, not only throttled desktop Chrome.
 - Chrome Performance panel with 4x CPU throttle for quick checks; real-device checks before each milestone closes.
 - Lighthouse CI budget (M6). Bundle-size check in CI (fail on > budget).
 - Record results per milestone in `docs/HANDOVER.md` so regressions are visible.
+- CI: `npm run check:bundle` fails the build over the 350 KB gzip initial-JS budget.
 
 ## Accessibility and comfort
 

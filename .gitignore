@@ -23,6 +23,8 @@ build/
 # node
 node_modules/
 frontend/dist/
+frontend/test-results/
+frontend/playwright-report/
 *.log
 
 # os / editor

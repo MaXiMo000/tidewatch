@@ -1,8 +1,14 @@
 :root {
   color-scheme: dark;
-  --bg: #070d14;
-  --fg: #cfe3ee;
-  --dim: #6f8794;
+  --bg: #0b1030;
+  --fg: #e9e1f2;
+  --dim: #a99bbf;
+  --panel: rgb(11 16 48 / 55%);
+  --edge: rgb(233 225 242 / 18%);
+  --ok: #3fd0a5;
+  --lantern: #ffb45e;
+  --serif: ui-serif, Georgia, "Times New Roman", serif;
+  --mono: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
 }
 
 html,
@@ -11,7 +17,7 @@ body {
   height: 100%;
   background: var(--bg);
   color: var(--fg);
-  font-family: ui-serif, Georgia, "Times New Roman", serif;
+  font-family: var(--serif);
   overflow: hidden;
 }
 
@@ -23,20 +29,135 @@ body {
   display: block;
 }
 
+/* Cheap CSS vignette on every tier instead of a post-processing pass. */
+#vignette {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(ellipse at 50% 45%, transparent 55%, rgb(5 6 20 / 55%) 100%);
+}
+
 #hud {
   position: fixed;
-  top: 16px;
-  left: 16px;
-  right: 16px;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 16px;
+  pointer-events: none;
+}
+
+#hud-top,
+#hud-bottom {
   display: flex;
   justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+}
+
+#hud-bottom {
+  align-items: flex-end;
+}
+
+#hud-brand {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 400;
+  letter-spacing: 0.32em;
+}
+
+#hud-readout {
+  text-align: right;
+  font-family: var(--mono);
   font-size: 12px;
-  letter-spacing: 0.18em;
-  pointer-events: none;
+}
+
+#hud-readout p {
+  margin: 0 0 4px;
 }
 
 #hud-status {
   color: var(--dim);
+}
+
+#hud-compass {
+  position: relative;
+  width: 64px;
+  height: 64px;
+  border: 1px solid var(--edge);
+  border-radius: 50%;
+  background: var(--panel);
+}
+
+#hud-compass-rose {
+  position: absolute;
+  inset: 0;
+}
+
+.cardinal {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--dim);
+  transform-origin: 0 0;
+}
+
+.cardinal-n {
+  color: var(--lantern);
+  transform: rotate(0deg) translate(-50%, -28px);
+}
+.cardinal-e {
+  transform: rotate(90deg) translate(-50%, -28px);
+}
+.cardinal-s {
+  transform: rotate(180deg) translate(-50%, -28px);
+}
+.cardinal-w {
+  transform: rotate(270deg) translate(-50%, -28px);
+}
+
+#hud-heading {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  font-family: var(--mono);
+  font-size: 10px;
+}
+
+#hud-tier {
+  pointer-events: auto;
+  font: 12px var(--mono);
+  color: var(--fg);
+  background: var(--panel);
+  border: 1px solid var(--edge);
+  border-radius: 999px;
+  padding: 8px 14px;
+  cursor: pointer;
+  min-height: 36px;
+}
+
+#hud-tier:hover {
+  border-color: var(--ok);
+}
+
+#hud-tier:focus-visible {
+  outline: 2px solid var(--ok);
+  outline-offset: 2px;
+}
+
+#debug-overlay {
+  position: fixed;
+  top: 64px;
+  left: 16px;
+  margin: 0;
+  padding: 8px 10px;
+  font: 11px/1.5 var(--mono);
+  background: var(--panel);
+  border: 1px solid var(--edge);
+  pointer-events: none;
 }
 
 @media (prefers-reduced-motion: reduce) {

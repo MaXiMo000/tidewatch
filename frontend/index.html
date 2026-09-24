@@ -5,15 +5,34 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="referrer" content="no-referrer" />
     <meta name="color-scheme" content="dark" />
+    <meta name="description" content="A live 3D view of service health: islands are services, channels are traffic." />
     <title>Tidewatch</title>
     <!-- No inline scripts or styles anywhere: the production CSP is script-src 'self'; style-src 'self'. -->
   </head>
   <body>
-    <canvas id="scene" aria-label="Live 3D view of service health"></canvas>
-    <div id="hud">
-      <span id="hud-brand">TIDEWATCH</span>
-      <span id="hud-status" role="status" aria-live="polite">connecting…</span>
-    </div>
+    <canvas id="scene" aria-hidden="true"></canvas>
+    <div id="vignette" aria-hidden="true"></div>
+    <main id="hud">
+      <header id="hud-top">
+        <h1 id="hud-brand">TIDEWATCH</h1>
+        <div id="hud-readout">
+          <p id="hud-status" role="status" aria-live="polite">connecting…</p>
+          <p id="hud-summary" aria-live="polite"></p>
+        </div>
+      </header>
+      <footer id="hud-bottom">
+        <div id="hud-compass" role="img" aria-label="Compass">
+          <div id="hud-compass-rose" aria-hidden="true">
+            <span class="cardinal cardinal-n">N</span>
+            <span class="cardinal cardinal-e">E</span>
+            <span class="cardinal cardinal-s">S</span>
+            <span class="cardinal cardinal-w">W</span>
+          </div>
+          <span id="hud-heading" aria-hidden="true">000°</span>
+        </div>
+        <button id="hud-tier" type="button">quality: …</button>
+      </footer>
+    </main>
     <noscript>Tidewatch needs JavaScript and WebGL to render its live view.</noscript>
     <script type="module" src="/src/main.ts"></script>
   </body>

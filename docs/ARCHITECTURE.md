@@ -70,16 +70,23 @@ backend serves both during a deprecation window.
 | `net/protocol.ts` | zod schemas mirroring the backend; the trust boundary for network data |
 | `net/client.ts` | ticket fetch -> WS -> first-message auth -> validated snapshots; backoff + jitter reconnect |
 | `state/store.ts` | Latest snapshot + connection state. Sockets write; render loop reads |
-| `main.ts` | Placeholder scene (M0). Replaced by the modules below |
+| `main.ts` | Bootstrap and the single render loop; applies tier changes in one place |
+| `quality/tiers.ts` | The tier table below (pixel-ratio cap, fps cap, water/sky/glow detail, particle budget) |
+| `quality/gpu.ts` | Initial tier guess from renderer string, cores, memory, pointer type (probed on a throwaway canvas) |
+| `quality/governor.ts` | FPS governor: down after ~2 s slow, up after 15 s good, exponential retry back-off |
+| `scene/layout.ts` | Deterministic island positions from topology (longest-path columns), order-independent |
+| `scene/world.ts` | Islands (size = traffic, crown/glow = status), lanterns, channels; `sync()` per snapshot, `tick()` per frame |
+| `scene/water.ts`, `sky.ts`, `glow.ts`, `palette.ts`, `camera.ts` | Tiered water shader, camera-centred dusk dome, shared glow texture, colours, idle orbit |
+| `hud/hud.ts` | Status, text health summary, compass, quality control (textContent only) |
+| `debug/overlay.ts` | `?debug=1` fps / CPU ms / draw calls / triangles - dev builds only |
 
-Planned (M1+):
+Planned (M2+):
 
 ```
 src/
-  scene/     renderer.ts  world.ts (islands)  water.ts  sky.ts  particles.ts  weather.ts
+  scene/     particles.ts  weather.ts
   story/     timeline.ts (GSAP master)  camera-path.ts  chapters.ts  overlays.ts
   live/      freefly.ts  panel.ts  feed.ts  fallback2d.ts
-  quality/   tiers.ts  governor.ts (FPS monitor)  gpu.ts (detect-gpu)
   audio/     ambience.ts (optional, off by default)
 ```
 
@@ -95,15 +102,21 @@ src/
 | --- | --- | --- | --- |
 | Pixel ratio cap | 2 | 1.5 | 1 |
 | Water | shader + optional planar reflection | shader, fake reflection | flat gradient + Fresnel |
-| Post-processing | bloom + grain + vignette | vignette | none (CSS vignette) |
+| Post-processing | CSS vignette + baked glow sprites (bloom/grain: evaluate against the budget in M3) | CSS vignette + glow sprites | CSS vignette, no glow |
 | Particles | 2000 | 800 | 250 |
 | Fog/clouds | layered | single layer | single layer |
 | Shadows | off (baked glow instead) | off | off |
 | Target fps | 60 | 60 | 30 |
 
-`detect-gpu` picks the starting tier; `quality/governor.ts` samples frame time and steps **down**
-(and, with hysteresis, back up). Users can override in a settings menu. A 2D fallback dashboard covers
-no-WebGL and below-minimum devices.
+`quality/gpu.ts` guesses the starting tier; `quality/governor.ts` samples the rAF interval and steps
+**down** after ~2 s below ~48 fps, and back **up** only after 15 s at ~55+ fps, with a doubling
+back-off on a tier it fell from. Users override with the HUD quality button (auto/high/medium/low,
+kept in `localStorage` as a display preference) or `?quality=`. Low and idle (20 s without input)
+render at 30 fps. A 2D fallback dashboard (M4) covers no-WebGL and below-minimum devices.
+
+Not `detect-gpu` (the original plan): it fetches benchmark JSON from a CDN at runtime, a third-party
+origin forbidden by CLAUDE.md rule 5, unless ~1 MB of data is self-hosted, and it is one more
+dependency. A coarse guess is enough because the governor corrects it within seconds.
 
 ## 6. Live data adapters (M5) - design
 
@@ -139,6 +152,9 @@ environment. `scripts/smoke_compose.py` checks the running stack (also run by th
 
 - **Backend:** unit tests for every security primitive and failure path (see `tests/test_security.py`);
   add property tests for schemas; SSRF tests for adapters; WebSocket load test with k6 in M6.
-- **Frontend:** vitest for protocol/client/store; Playwright smoke test (page loads, canvas renders,
-  HUD says `live`) in M1; visual regression on chapter keyframes in M2; Lighthouse budget in M6.
+- **Frontend:** vitest for protocol, layout, governor, tier heuristics. Playwright smoke tests
+  (`frontend/e2e/`, since M1) run in the CI `compose` job against the real HTTPS stack with the
+  runner's installed Chrome: zero CSP violations/console errors, live data, a rendered canvas on
+  every tier, keyboard tier control, reduced motion. Bundle budget checked in CI. Visual regression
+  on chapter keyframes in M2; Lighthouse budget in M6.
 - **Security:** ZAP baseline in CI (M6); CSP violations reported to a log endpoint in report-only phase.

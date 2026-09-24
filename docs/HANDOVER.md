@@ -3,7 +3,7 @@
 Audience: Claude Code (or any engineer) picking this project up cold. Read this file, then
 `CLAUDE.md`, then the milestone you are working on in `docs/PLAN.md`.
 
-## 1. Where things stand (M0 done - next: M1)
+## 1. Where things stand (M1 built - next: M2)
 
 ### Built
 - **Backend** (`backend/app/`): config validation, strict schemas, security primitives,
@@ -11,13 +11,23 @@ Audience: Claude Code (or any engineer) picking this project up cold. Read this 
 - **Backend tests** (`backend/tests/test_security.py`): 31 tests covering headers, trusted hosts, Origin
   check, single-use tickets, auth timeout, oversized/garbage auth, rate limit, connection cap,
   config validation (incl. wildcard/non-exact hosts and origins), schema strictness, prod docs disabled.
-- **Frontend** (`frontend/src/`): zod protocol mirror + tests, reconnecting client with
-  first-message auth, store, placeholder scene. `package-lock.json` committed.
+- **Frontend** (`frontend/src/`): zod protocol mirror, reconnecting client with first-message auth,
+  store, and the M1 scene: dusk archipelago (islands from topology, tiered water/sky, baked glow),
+  quality tiers + FPS governor, HUD (status, text health summary, compass, quality control).
+  26 unit tests (vitest) + 8 browser tests (Playwright, `frontend/e2e/`). `package-lock.json` committed.
 - **Deploy** (`deploy/`): Caddyfile (TLS + strict CSP + single origin) and hardened compose file;
   backend image installs only from the hash-pinned `backend/requirements.lock`; base images pinned by digest.
 - **Repo hygiene**: public at `github.com/MaXiMo000/tidewatch` with `scripts/harden-repo.sh` applied;
   CI (backend, frontend, compose smoke test, gitleaks, CodeQL) with SHA-pinned actions (enforced by
   the repo setting), Dependabot (pip, npm, actions, docker, docker-compose).
+
+### Verified (M1, 2026-09-24)
+| Item | Result |
+| --- | --- |
+| Unit tests: layout (order independence, longest path, cycles, 200-node DAG), governor (down/up/hysteresis/back-off/pauses), tier heuristic, protocol | 26 pass |
+| Browser E2E vs the HTTPS compose stack (Chrome and Edge locally; Chrome in CI) | 8/8: zero CSP violations and console errors, live seq advancing, real rendered canvas on High/Medium/Low, keyboard tier control with accessible name, reduced motion stops the orbit |
+| Bundle | 150.8 KB gzip (budget 350), checked in CI; debug overlay absent from prod |
+| Frame cost (dev preview, Medium, this Windows laptop, Chrome) | 38 draw calls, 1,230 triangles, ~0.5 ms CPU/frame (budgets: <= 150 / 150k High, <= 60 / 40k Low) |
 
 ### Verified (M0, 2026-09-24)
 | Item | Result |
@@ -49,7 +59,10 @@ Audience: Claude Code (or any engineer) picking this project up cold. Read this 
 ### Still NOT verified
 | Item | Why |
 | --- | --- |
-| Real browser against the compose stack (`https://localhost`) | The local CA is not trusted by the preview browser; the same built assets were checked in the dev stack and all headers/WS behaviour by the smoke test. Check once with the CA installed |
+| **M1 acceptance: 60 fps High / 30+ fps Low on the reference low-end device** | No reference device chosen or available. Needs the owner: pick one (PERFORMANCE.md), open `?debug=1` on a dev build, or run the production build and watch the tier the governor settles on |
+| Governor stepping down on real slow hardware | Logic unit-tested with synthetic frames; not observed on a genuinely slow GPU |
+| iOS Safari / Android Chrome / Firefox | Only Chrome and Edge on Windows, and headless Chrome (SwiftShader) in CI |
+| Draw calls scale per island (5 on High/Medium, 3 on Low) | Fine for the 7-service demo (38 calls). Budgets are hit at ~19 services on Low (60) and ~29 on High (150): instance islands before real topologies arrive (M3/M5) |
 | Deployment on a real public host / real domain / Let's Encrypt | Only `localhost` tested |
 | `pre-commit` hooks | Not installed locally; gitleaks ran manually before each commit |
 | Starlette `httpx` TestClient deprecation | Warning only (Starlette asks for `httpx2`); tests pass. Revisit when it becomes an error |
@@ -63,12 +76,15 @@ pip install -e ".[dev]"
 ruff check . && mypy app && bandit -q -r app -c pyproject.toml && pip-audit && pytest
 
 # 2. Frontend (Node >= 22.12)
-cd ../frontend && npm ci --ignore-scripts && npm run typecheck && npm test && npm run build
+cd ../frontend && npm ci --ignore-scripts && npm run typecheck && npm test && npm run build && npm run check:bundle
+# dev: npm run dev, then http://localhost:5173/?debug=1 (overlay) or ?quality=high|medium|low
 
 # 3. Full stack over HTTPS + smoke test
 cd ../deploy && TIDEWATCH_DOMAIN=localhost docker compose up --build -d --wait
 docker compose cp caddy:/data/caddy/pki/authorities/local/root.crt /tmp/ca.crt
 TIDEWATCH_DOMAIN=localhost ../backend/.venv/bin/python ../scripts/smoke_compose.py --ca /tmp/ca.crt --compose-file docker-compose.yml
+# browser tests need TIDEWATCH_TICKET_RATE_PER_MINUTE=120 on `compose up` (all pages share one IP)
+cd ../frontend && E2E_BASE_URL=https://localhost E2E_CHANNEL=chrome npm run e2e   # or msedge
 
 # 4. After changing backend runtime dependencies (needs Docker)
 ./scripts/lock-backend.sh

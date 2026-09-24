@@ -5,9 +5,10 @@ Services are islands, requests are ships of light, latency is fog and storms, er
 FastAPI streams the metrics over a hardened WebSocket; Three.js renders them; it is designed to
 stay smooth on low-end devices.
 
-> Status: **M0 complete** (bring-up and baseline). The backend is a working secure skeleton with
-> a demo data source, verified in CI and in the production-shaped Docker stack; the frontend is a
-> placeholder scene proving the end-to-end data path. Next: M1 (scene foundation + quality tiers). See [`docs/HANDOVER.md`](docs/HANDOVER.md) for exactly
+> Status: **M1 built** (scene foundation + quality tiers). A dusk archipelago driven live by the
+> demo data source, with High/Medium/Low tiers and an FPS governor, verified in a real browser
+> against the production-shaped HTTPS stack in CI. Not yet measured on a real low-end device.
+> Next: M2 (scroll movie). See [`docs/HANDOVER.md`](docs/HANDOVER.md) for exactly
 > what is and is not verified.
 
 ## Why it exists

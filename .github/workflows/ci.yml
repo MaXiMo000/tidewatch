@@ -54,6 +54,7 @@ jobs:
       - run: npm run typecheck
       - run: npm test
       - run: npm run build
+      - run: npm run check:bundle # docs/PERFORMANCE.md: initial JS <= 350 KB gzip
       - run: npm audit --omit=dev --audit-level=high
 
   # Builds the image from the hash-pinned lock and smoke-tests the production-shaped stack over
@@ -79,6 +80,8 @@ jobs:
         working-directory: deploy
         env:
           TIDEWATCH_DOMAIN: localhost
+          # Test pages all share one client IP; the production default stays 10/min.
+          TIDEWATCH_TICKET_RATE_PER_MINUTE: "120"
         run: docker compose up --build --detach --wait --wait-timeout 120
       - name: Smoke test
         env:
@@ -87,6 +90,15 @@ jobs:
           pip install --require-hashes --no-deps -r backend/requirements.lock
           docker compose -f deploy/docker-compose.yml cp caddy:/data/caddy/pki/authorities/local/root.crt "$RUNNER_TEMP/ca.crt"
           python scripts/smoke_compose.py --ca "$RUNNER_TEMP/ca.crt"
+      # Real browser against the real stack: zero CSP violations/console errors, live data, a
+      # rendered scene on every quality tier, keyboard-operable tier control, reduced motion.
+      # Uses the runner's installed Chrome (channel), so no browser binaries are downloaded.
+      - name: Browser E2E
+        working-directory: frontend
+        env:
+          E2E_BASE_URL: https://localhost
+          E2E_CHANNEL: chrome
+        run: npm run e2e
       - name: Logs on failure
         if: failure()
         working-directory: deploy

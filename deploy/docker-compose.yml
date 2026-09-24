@@ -10,6 +10,9 @@ services:
       TIDEWATCH_MODE: ${TIDEWATCH_MODE:-demo}
       TIDEWATCH_ALLOWED_ORIGINS: '["https://${TIDEWATCH_DOMAIN:?set TIDEWATCH_DOMAIN}"]'
       TIDEWATCH_ALLOWED_HOSTS: '["${TIDEWATCH_DOMAIN}"]'
+      # Per-IP ticket rate. Default = the app default (10/min). Only the CI browser tests raise it,
+      # because every test page shares one client IP; never raise it for a public deployment.
+      TIDEWATCH_TICKET_RATE_PER_MINUTE: ${TIDEWATCH_TICKET_RATE_PER_MINUTE:-10}
       # TIDEWATCH_API_KEYS is injected from the host environment / secret manager in live mode.
     read_only: true
     tmpfs: [/tmp]
