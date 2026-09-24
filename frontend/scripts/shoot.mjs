@@ -47,6 +47,17 @@ try {
       page.on("response", (r) => r.status() >= 400 && errors.push(`${r.status()} ${r.url()}`));
       await page.goto(`${base}/?quality=${tier}${extra}`);
       await page.waitForSelector('html[data-ready="1"]', { timeout: 90_000 });
+      // --until "3 failing": wait (up to 2 min) for a health state in the HUD summary, e.g. to
+      // capture the demo incident; --after N then lets the drama build for N ms.
+      if (args.until) {
+        const re = new RegExp(args.until);
+        await page.waitForFunction(
+          (src) => new RegExp(src).test(document.querySelector("#hud-summary")?.textContent ?? ""),
+          re.source,
+          { timeout: 120_000, polling: 500 },
+        );
+        await page.waitForTimeout(Number(args.after ?? 6000));
+      }
       await page.waitForTimeout(Number(args.settle ?? 2500));
       const gpu = await page.evaluate(() => {
         const gl = document.createElement("canvas").getContext("webgl2");

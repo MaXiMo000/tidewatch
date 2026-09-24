@@ -28,6 +28,7 @@ uniform vec3 uSunColor;
 uniform float uCover;
 uniform float uTime;
 uniform float uStorm;
+uniform float uFlash;
 varying vec3 vDir;
 
 vec3 skyColour(vec3 d) {
@@ -37,7 +38,7 @@ vec3 skyColour(vec3 d) {
   float glowWidth = mix(0.05, 0.22, pow(sunAmt, 2.0));
   vec3 c = mix(uHorizon, uMid, smoothstep(0.0, glowWidth, h));
   c = mix(c, uZenith, smoothstep(0.12, 0.7, h));
-  c += uSunColor * (smoothstep(0.99994, 0.99997, sunAmt) * 12.0 + pow(sunAmt, 3000.0) * 0.25 + pow(sunAmt, 60.0) * 0.12 + pow(sunAmt, 5.0) * 0.12);
+  c += uSunColor * (smoothstep(0.99994, 0.99997, sunAmt) * 3.2 + pow(sunAmt, 3000.0) * 0.2 + pow(sunAmt, 60.0) * 0.12 + pow(sunAmt, 5.0) * 0.12);
   return c;
 }
 
@@ -70,6 +71,8 @@ void main() {
     cloud += uSunColor * edge * pow(sunAmt, 6.0) * 1.4;
     // Storm (M3 hook): darker, heavier clouds.
     cloud = mix(cloud, uCloudShadow * 0.45, uStorm * 0.7);
+    // Lightning lights the cloud bodies from inside, cold white-violet.
+    cloud += vec3(0.75, 0.78, 1.0) * uFlash * (0.4 + density) * 1.6;
     // Low haze band: sky and far water meet in the same soft glow instead of a hard line.
     col = mix(col, cloud, density * 0.96);
   }
@@ -112,6 +115,7 @@ export class CinematicSky {
         uCover: { value: 0.6 },
         uTime: { value: 0 },
         uStorm: { value: 0 },
+        uFlash: { value: 0 },
       },
     });
     this.mesh = new THREE.Mesh(new THREE.SphereGeometry(900, 48, 24), this.material);
@@ -132,8 +136,9 @@ export class CinematicSky {
     if (u["uCover"]) u["uCover"].value = params.cloudCover;
   }
 
-  tick(seconds: number, storm: number, camera: THREE.Camera): void {
+  tick(seconds: number, storm: number, camera: THREE.Camera, flash = 0): void {
     const u = this.material.uniforms;
+    if (u["uFlash"]) u["uFlash"].value = flash;
     if (u["uTime"]) u["uTime"].value = seconds;
     if (u["uStorm"]) u["uStorm"].value = storm;
     this.syncParams();

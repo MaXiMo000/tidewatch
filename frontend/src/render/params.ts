@@ -25,10 +25,10 @@ export const params = {
   fogColor: 0x23403b,
   fogDensity: 0.016,
   fogHeight: 4.2,
-  shafts: 0.35,
+  shafts: 0.22,
   // world
   foliageDensity: 1.0,
-  bloom: 0.6,
+  bloom: 0.45,
 };
 
 export type Params = typeof params;

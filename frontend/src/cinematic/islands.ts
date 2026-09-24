@@ -363,9 +363,31 @@ function mergeStatic(group: THREE.Group, keep: THREE.Object3D): void {
 interface IslandView {
   state: IslandState;
   root: THREE.Group;
-  signal: THREE.Mesh;
-  signalGlow: THREE.Sprite;
-  shownStatus: Status;
+  /** Per-island materials so each islet can pulse / flicker with its own health. */
+  signalMat: THREE.MeshStandardMaterial;
+  windowMat: THREE.MeshStandardMaterial;
+  glowMat: THREE.SpriteMaterial;
+  lanternMat: THREE.SpriteMaterial;
+  phase: number;
+  /** World-space shore circle for the water's foam: x, z, radius. */
+  shore: THREE.Vector3;
+}
+
+const STATUS_COLOURS: Record<Status, THREE.Color> = {
+  ok: new THREE.Color(STATUS_HEX.ok),
+  degraded: new THREE.Color(STATUS_HEX.degraded),
+  failing: new THREE.Color(STATUS_HEX.failing),
+};
+const WARM = new THREE.Color(0xffa95c);
+const RED_WINDOW = new THREE.Color(0xff5a48);
+
+/** Smooth pseudo-random 0..1 signal (no hard steps: flicker without strobing). */
+function smoothNoise(t: number, seed: number): number {
+  return (
+    0.5 +
+    0.3 * Math.sin(t * 2.3 + seed) +
+    0.2 * Math.sin(t * 4.1 + seed * 1.7) * Math.sin(t * 0.9 + seed * 0.3)
+  );
 }
 
 export class Islands {
@@ -375,7 +397,11 @@ export class Islands {
   private builtVersion = -1;
   private facingKey = "";
 
-  update(model: WorldModel, eye: THREE.Vector3): void {
+  private readonly tmp = new THREE.Color();
+  /** Shore circles, updated each frame (the water reads them for foam). */
+  readonly shores: THREE.Vector3[] = [];
+
+  update(model: WorldModel, eye: THREE.Vector3, seconds: number, reducedMotion: boolean): void {
     if (model.topologyVersion !== this.builtVersion) this.rebuild(model);
     // Turn each structure's front (+z: doors, windows, lock ring, vault door) toward the camera's
     // base view, with a little per-island jitter so it does not look staged.
@@ -388,12 +414,31 @@ export class Islands {
       }
     }
     for (const v of this.views) {
-      v.root.scale.setScalar(0.95 + 0.4 * v.state.scale);
-      if (v.shownStatus !== v.state.status) {
-        v.shownStatus = v.state.status;
-        v.signal.material = this.mats.status[v.state.status];
-        v.signalGlow.material = this.mats.statusGlow[v.state.status];
-      }
+      const scale = 0.95 + 0.4 * v.state.scale;
+      v.root.scale.setScalar(scale);
+      v.shore.set(v.root.position.x, v.root.position.z, 1.35 * scale);
+      const w = v.state.weight;
+      // Signal colour cross-fades between statuses with the eased weights (no popping).
+      const { ok, degraded, failing } = STATUS_COLOURS;
+      this.tmp.setRGB(
+        ok.r * w.ok + degraded.r * w.degraded + failing.r * w.failing,
+        ok.g * w.ok + degraded.g * w.degraded + failing.g * w.failing,
+        ok.b * w.ok + degraded.b * w.degraded + failing.b * w.failing,
+      );
+      const t = seconds + v.phase;
+      // Degraded: slow amber breathing (~0.8 Hz). Failing: irregular red flicker, smooth (no strobe).
+      const pulse = reducedMotion ? 0.5 : 0.5 + 0.5 * Math.sin(t * 5);
+      const flicker = reducedMotion ? 0.6 : smoothNoise(t * 2.2, v.phase * 13);
+      const intensity = 3.5 + w.degraded * (1 + 4 * pulse) + w.failing * (2 + 6 * flicker);
+      v.signalMat.emissive.copy(this.tmp);
+      v.signalMat.emissiveIntensity = intensity;
+      v.glowMat.color.copy(this.tmp);
+      v.glowMat.opacity = 0.35 + w.degraded * 0.35 * pulse + w.failing * 0.5 * flicker;
+      // Windows: warm when healthy; dim and pulse when degraded; reddish, stuttering when failing.
+      v.windowMat.emissive.copy(WARM).lerp(RED_WINDOW, w.failing * 0.6);
+      v.windowMat.emissiveIntensity =
+        5.5 * (1 - w.degraded * 0.35 * (1 - pulse) - w.failing * (0.55 - 0.45 * flicker));
+      v.lanternMat.opacity = 0.5 * (1 - w.failing * 0.4 * (1 - flicker));
     }
   }
 
@@ -417,23 +462,41 @@ export class Islands {
       const islet = new THREE.Mesh(isletGeometry(state.id, radius), this.mats.rock);
       islet.receiveShadow = true;
       islet.castShadow = true;
-      const built = structure(kind, this.mats, state.status, rnd);
+      const signalMat = this.mats.status.ok.clone();
+      const windowMat = this.mats.window.clone();
+      const glowMat = this.mats.statusGlow.ok.clone();
+      const lanternMat = this.mats.lanternGlow.clone();
+      const own: Mats = {
+        ...this.mats,
+        window: windowMat,
+        status: { ok: signalMat, degraded: signalMat, failing: signalMat },
+        statusGlow: { ok: glowMat, degraded: glowMat, failing: glowMat },
+        lanternGlow: lanternMat,
+      };
+      const built = structure(kind, own, state.status, rnd);
       mergeStatic(built.group, built.signal);
       root.add(islet, built.group);
       root.position.set(state.place.x, 0, state.place.z);
       this.root.add(root);
+      const shore = new THREE.Vector3(state.place.x, state.place.z, 1.35);
+      this.shores.push(shore);
       this.views.push({
         state,
         root,
-        signal: built.signal,
-        signalGlow: built.signalGlow,
-        shownStatus: state.status,
+        signalMat,
+        windowMat,
+        glowMat,
+        lanternMat,
+        phase: unitNoise(state.id, 71) * 10,
+        shore,
       });
     }
   }
 
   private clear(): void {
+    this.shores.length = 0;
     for (const v of this.views) {
+      for (const m of [v.signalMat, v.windowMat, v.glowMat, v.lanternMat]) m.dispose();
       this.root.remove(v.root);
       v.root.traverse((o) => {
         if (o instanceof THREE.Mesh) o.geometry.dispose();

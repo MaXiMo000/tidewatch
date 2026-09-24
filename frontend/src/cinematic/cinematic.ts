@@ -12,6 +12,8 @@ import type { PathInfo, RenderPath, ViewBase } from "../render/path";
 import type { Tier } from "../quality/tiers";
 import type { WorldModel } from "../scene/model";
 import { makeWaterNormalMap } from "./noise";
+import { Boats, WakeField } from "./boats";
+import { Drama } from "./drama";
 import { Foliage } from "./foliage";
 import { Islands } from "./islands";
 import { CinematicPost } from "./post";
@@ -42,6 +44,10 @@ class CinematicPath implements RenderPath {
   private readonly normalMap: THREE.DataTexture;
   private readonly islands = new Islands();
   private readonly foliage = new Foliage();
+  private readonly boats = new Boats();
+  private readonly wakes = new WakeField(this.boats);
+  private readonly drama = new Drama();
+  private wakeFit = -1;
 
   constructor(
     private readonly renderer: THREE.WebGLRenderer,
@@ -54,7 +60,7 @@ class CinematicPath implements RenderPath {
     this.water = new CinematicWater(this.normalMap);
     this.scene.fog = this.fog;
     this.scene.add(this.sky.mesh, this.water.mesh, this.sun, this.sun.target, this.hemi);
-    this.scene.add(this.islands.root, this.foliage.root);
+    this.scene.add(this.islands.root, this.foliage.root, this.boats.mesh, this.drama.root);
     // One soft shadow cascade over the archipelago (islets and structures cast and receive).
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
@@ -109,12 +115,22 @@ class CinematicPath implements RenderPath {
   }
 
   frame(dt: number, seconds: number, camera: THREE.PerspectiveCamera, view: ViewBase): void {
-    void dt;
     const t = this.reducedMotion ? seconds * 0.3 : seconds;
     setViewAzimuth(Math.atan2(view.target.x - view.eye.x, view.target.z - view.eye.z));
     sunDirection(this.sunDir);
     this.refreshEnvironment();
-    this.islands.update(this.model, view.eye);
+    this.islands.update(this.model, view.eye, t, this.reducedMotion);
+    // Requests: boats (GPU-animated) and the wake field they write into.
+    this.boats.update(this.model, 64);
+    this.boats.tick(t);
+    if (this.wakeFit !== this.model.topologyVersion) {
+      this.wakeFit = this.model.topologyVersion;
+      this.wakes.fit(this.model);
+    }
+    this.wakes.update(this.renderer, dt);
+    // Health drama: storm clouds, rain, lightning, fireflies.
+    this.drama.update(this.model, t, dt, camera, this.renderer.getPixelRatio(), this.reducedMotion);
+    this.water.setSurface(this.wakes.texture, this.wakes.rect, this.islands.shores, this.drama.rain);
     this.foliage.update(this.model, view);
     this.foliage.tick(t, this.reducedMotion, this.sunDir);
     // Shadow frustum fitted to the archipelago, lit from the low sun (raised a little so shadows
@@ -128,7 +144,10 @@ class CinematicPath implements RenderPath {
     sc.near = 1;
     sc.far = 160;
     sc.updateProjectionMatrix();
-    this.sky.tick(t, this.model.storm, camera);
+    // The sky darkens with the failing share and lights up with each lightning strike.
+    this.sky.tick(t, Math.min(1, this.model.storm * 1.8), camera, this.drama.flash);
+    this.sun.intensity = 2.2 * (1 - this.model.storm * 0.6) + this.drama.flash * 2.5;
+    this.post.setLook(this.drama.flash, camera.position.distanceTo(view.target), this.reducedMotion);
     this.water.tick(t, camera);
     this.post.updateFog(this.model.latency, this.sunDir, t, camera);
     this.fog.color.copy(this.post.fogColor);
@@ -151,12 +170,16 @@ class CinematicPath implements RenderPath {
     return {
       calls: this.lastCalls + 3,
       triangles: this.lastTriangles + 3,
-      gpuBytes: this.post.gpuBytes + this.water.gpuBytes + envBytes + normalBytes,
+      gpuBytes:
+        this.post.gpuBytes + this.water.gpuBytes + this.wakes.gpuBytes + this.drama.gpuBytes + envBytes + normalBytes,
     };
   }
 
   dispose(): void {
     this.renderer.shadowMap.enabled = false;
+    this.boats.dispose();
+    this.wakes.dispose();
+    this.drama.dispose();
     this.islands.dispose();
     this.foliage.dispose();
     this.post.dispose();

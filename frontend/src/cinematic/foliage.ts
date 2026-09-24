@@ -197,7 +197,7 @@ export class Foliage {
       }),
       0.00022,
       "leaf",
-      1.8,
+      1.0,
     );
     const mossMat = withSway(
       new THREE.MeshStandardMaterial({
