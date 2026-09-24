@@ -2,7 +2,7 @@
 
 All notable changes. Versions follow [Semantic Versioning](https://semver.org/).
 
-## [0.1.0] - unreleased (tag after M2-M6 are merged)
+## [0.1.0] - 2026-09-24
 
 ### Added
 - **M6 hardening:** Trusted Types enforced; ZAP baseline and k6 WebSocket load tests in CI;
