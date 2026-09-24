@@ -108,12 +108,16 @@ foundations come before spectacle.
 | Decision | Reason |
 | --- | --- |
 | Vite + vanilla Three.js (no React Three Fiber) | Smaller bundle, fewer deps, direct control of the render loop for low-end devices |
-| Stylised low-poly + glow, not photoreal | Cinematic on weak GPUs; small assets |
+| ~~Stylised low-poly + glow, not photoreal~~ -> tiered: near-photoreal Cinematic, stylised Balanced/Simple | Owner decision 2026-09-24 (art pass): High evokes the reference swamp; weak devices get the simple version; Medium/Low must not slow down to serve High |
 | Demo mode is the default | Runs with zero credentials; safe to show publicly |
 | First-message WebSocket auth with single-use ticket | Keeps credentials out of URLs/logs/history |
 | One public origin behind Caddy | No CORS surface, simple CSP, automatic TLS |
 | Server-side polling with fixed interval | Upstream load independent of number of viewers |
 | Data flows store -> render loop | Message bursts cannot cause jank |
+| detect-gpu picks the start tier, benchmarks self-hosted | Owner decision; self-hosting keeps rule 5 (no third-party runtime origin) |
+| Cinematic is fully procedural (no downloaded models/textures) | Allowed by the asset rules; avoids untrusted-file parsing, WASM decoders and any CSP relaxation; 14.8 KB lazy download instead of MBs |
+| Cinematic camera: pendulum drift around an auto-composed base view | A full orbit cannot keep framing trees at the sides without them occluding islands |
+| prefers-reduced-motion stops the camera (overrides "never frozen") | The OS accessibility setting outranks the cinematic brief |
 
 ## 6. Open questions for the owner
 

@@ -3,7 +3,7 @@
 Audience: Claude Code (or any engineer) picking this project up cold. Read this file, then
 `CLAUDE.md`, then the milestone you are working on in `docs/PLAN.md`.
 
-## 1. Where things stand (M1 built - next: M2)
+## 1. Where things stand (M1 merged; art pass Rounds 1-2 in review - then Rounds 3-4, then M2)
 
 ### Built
 - **Backend** (`backend/app/`): config validation, strict schemas, security primitives,
@@ -20,6 +20,20 @@ Audience: Claude Code (or any engineer) picking this project up cold. Read this 
 - **Repo hygiene**: public at `github.com/MaXiMo000/tidewatch` with `scripts/harden-repo.sh` applied;
   CI (backend, frontend, compose smoke test, gitleaks, CodeQL) with SHA-pinned actions (enforced by
   the repo setting), Dependabot (pip, npm, actions, docker, docker-compose).
+
+### Art pass (before M2) - Rounds 1-2 done, awaiting owner review (PR #15)
+Screenshots and critique logs: `docs/screenshots/round-1/`, `docs/screenshots/round-2/`.
+
+| Tier | fps (this machine: Intel UHD, i3-1125G4, 1440x900, dpr 1) | Draw calls | Triangles | GPU mem (est.) | Download beyond initial |
+| --- | --- | --- | --- | --- | --- |
+| Cinematic | **41** (headed Chrome) - below the Iris Xe floor, as expected for this GPU | 169 | 300k | 28 MB | 14.8 KB gzip JS (all procedural) |
+| Balanced | not measured headed (headless throttles rAF; see below) | 39 | 7k | ~0 | none |
+| Simple | not measured headed | 25 | 3k | ~0 | none |
+
+Initial JS 160.6 KB gzip (budget 350). Counts include every pass (main, planar reflection, shadow,
+post). Not verified yet: Cinematic on a discrete GPU / Apple M-series / Iris Xe; Balanced/Simple
+fps in a headed browser; any phone hardware; the governor stepping down from Cinematic on a real
+slow GPU (unit-tested).
 
 ### Verified (M1, 2026-09-24)
 | Item | Result |
