@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Apply GitHub-side security settings. NOT yet run against a real repo (see docs/HANDOVER.md);
-# each call is written from the GitHub REST docs - check the output and fix any 4xx.
+# Apply GitHub-side security settings. Idempotent: safe to re-run. Any FAIL line means that
+# setting must be applied by hand (Settings -> Code security / Branches / Actions).
 # Usage: ./scripts/harden-repo.sh owner repo
 set -uo pipefail
 OWNER="${1:?owner}"; REPO="${2:?repo}"
@@ -24,6 +24,9 @@ JSON
 api -X PUT "repos/$OWNER/$REPO/private-vulnerability-reporting"
 api -X PUT "repos/$OWNER/$REPO/vulnerability-alerts"
 api -X PUT "repos/$OWNER/$REPO/automated-security-fixes"
+# Actions: every `uses:` must be pinned to a full commit SHA (enforces SECURITY.md T19)
+api -X PUT "repos/$OWNER/$REPO/actions/permissions" \
+  -F enabled=true -f allowed_actions=all -F sha_pinning_required=true
 # Actions: read-only default token; workflows cannot approve PRs
 api -X PUT "repos/$OWNER/$REPO/actions/permissions/workflow" \
   -f default_workflow_permissions=read -F can_approve_pull_request_reviews=false
@@ -31,7 +34,7 @@ api -X PUT "repos/$OWNER/$REPO/actions/permissions/workflow" \
 # Protect main: PR + status checks, no force-push/deletion. Admin (you) can still bypass.
 gh api -X PUT "repos/$OWNER/$REPO/branches/main/protection" --input - >/dev/null <<'JSON' && echo "ok   branch protection" || echo "FAIL branch protection"
 {
-  "required_status_checks": { "strict": true, "contexts": ["backend", "frontend", "gitleaks"] },
+  "required_status_checks": { "strict": true, "contexts": ["backend", "frontend", "compose", "gitleaks", "analyze (python)", "analyze (javascript-typescript)"] },
   "enforce_admins": false,
   "required_pull_request_reviews": { "required_approving_review_count": 0 },
   "restrictions": null,
