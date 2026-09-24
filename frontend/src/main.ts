@@ -1,6 +1,8 @@
 /**
  * Bootstrap + the one render loop (docs/ARCHITECTURE.md s.4):
  * socket -> store -> WorldModel (eased, shared) -> the active RenderPath draws it.
+ * Scroll progress drives the film (scene/story.ts): the camera shot and the hero request, read
+ * once per frame here - never from a scroll handler.
  *
  * First paint is always the stylised path (main bundle). If the tier is Cinematic, its chunk is
  * imported lazily AFTER that first frame, behind a progress bar, and swapped in when ready. Leaving
@@ -11,6 +13,7 @@ import "./style.css";
 import { prettyName, setDisplayNames } from "./hud/copy";
 import { Hud, type HudState, type TierChoice } from "./hud/hud";
 import { Inspector } from "./hud/inspector";
+import { StoryUi } from "./hud/story";
 import { MetricsClient } from "./net/client";
 import { InfoSchema } from "./net/protocol";
 import { detectStartTier } from "./quality/detect";
@@ -19,8 +22,20 @@ import { FpsGovernor } from "./quality/governor";
 import { isTier, TIER_SETTINGS, type Tier } from "./quality/tiers";
 import type { RenderPath } from "./render/path";
 import { StylisedPath } from "./render/stylised";
+import { Beacon } from "./scene/beacon";
 import { CameraRig } from "./scene/camera";
 import { WorldModel } from "./scene/model";
+import {
+  liveWeight,
+  makePlan,
+  planRoute,
+  requestAt,
+  stillFor,
+  storyPose,
+  type Pose,
+  type StoryPlan,
+  type Vec3,
+} from "./scene/story";
 import { store } from "./state/store";
 
 const canvasEl = document.querySelector<HTMLCanvasElement>("#scene");
@@ -115,6 +130,14 @@ if (detected === "high" && autoCeiling !== "high") detected = autoCeiling;
 
 const model = new WorldModel();
 const rig = new CameraRig();
+const beacon = new Beacon();
+const storyUi = new StoryUi();
+let plan: StoryPlan | null = null;
+const planFor = { topology: -1, path: "", eyeX: NaN, eyeZ: NaN };
+const shot: Pose = { eye: { x: 0, y: 0, z: 0 }, target: { x: 0, y: 0, z: 0 } };
+const requestPos: Vec3 = { x: 0, y: 0, z: 0 };
+/** Scroll progress eased toward the real scroll position, so wheel steps glide instead of jump. */
+let filmP = storyUi.progress();
 const governor = new FpsGovernor(detected, performance.now());
 governor.setCeiling(autoCeiling);
 
@@ -134,6 +157,8 @@ function setLoading(fraction: number | null, label = ""): void {
 
 function usePath(next: RenderPath): void {
   path = next;
+  next.attach(beacon.root);
+  beacon.prewarm();
   rig.setShot(next.shot);
   next.setReducedMotion(reducedMotionQuery.matches);
   document.documentElement.dataset["path"] = next.name;
@@ -200,6 +225,7 @@ function applyChoice(now: number): void {
 }
 
 function resize(): void {
+  storyUi.measure();
   const w = canvas.clientWidth;
   const h = canvas.clientHeight;
   renderer.setSize(w, h, false);
@@ -220,7 +246,7 @@ let lastInput = performance.now();
 const markInput = (): void => {
   lastInput = performance.now();
 };
-for (const type of ["pointerdown", "keydown", "wheel", "touchstart"] as const) {
+for (const type of ["pointerdown", "keydown", "wheel", "touchstart", "scroll"] as const) {
   window.addEventListener(type, markInput, { passive: true });
 }
 window.addEventListener(
@@ -254,6 +280,13 @@ canvas.addEventListener("webglcontextrestored", () => {
 
 usePath(stylised);
 applyChoice(performance.now());
+// Web fonts change the chapter cards' height only inside fixed-height sections, but re-measure
+// once they land anyway, in case a browser lays the page out differently.
+void document.fonts?.ready.then(() => {
+  storyUi.measure();
+  // Only if the visitor has not scrolled yet: never yank someone back to the anchor.
+  if (window.scrollY < 2) storyUi.followHash();
+});
 
 // Demo or live? Live captions the watched apps and names their islands. Failure keeps the demo
 // copy. The stream starts after, so island labels are built with the right names.
@@ -339,8 +372,41 @@ function frame(now: number): void {
       [...model.islands.values()].map((i) => ({ x: i.place.x, z: i.place.z })),
     );
   }
+  // The film's plan follows the topology, and the render path (Cinematic films inside its channel).
+  const eye = rig.base.eye;
+  const stale =
+    planFor.topology !== model.topologyVersion ||
+    planFor.path !== path.name ||
+    Math.abs(planFor.eyeX - eye.x) > 0.05 ||
+    Math.abs(planFor.eyeZ - eye.z) > 0.05;
+  if (stale && model.islands.size > 0) {
+    planFor.topology = model.topologyVersion;
+    planFor.path = path.name;
+    planFor.eyeX = eye.x;
+    planFor.eyeZ = eye.z;
+    const nodes = [...model.islands.values()].map((i) => ({ id: i.id, kind: i.kind, x: i.place.x, z: i.place.z }));
+    const ids = planRoute(nodes, model.edges);
+    const route = ids.map((id) => model.islands.get(id)?.place ?? { x: 0, z: 0 });
+    const from = path.name === "cinematic" ? eye : null;
+    plan = ids.length > 0 ? makePlan(route, model.bounds.cx, model.bounds.cz, model.bounds.radius, from) : null;
+    storyUi.setRoute(ids.map(prettyName));
+  }
   model.tick(dt);
   rig.tick(dt);
+
+  // The film: reduced motion cuts to one still per chapter; otherwise the scroll position is eased.
+  const reduced = reducedMotionQuery.matches;
+  const scrollP = storyUi.progress();
+  storyUi.setProgress(scrollP);
+  filmP = reduced ? stillFor(scrollP) : filmP + (scrollP - filmP) * (1 - Math.exp(-7 * dt));
+  const seconds = (now - start) / 1000;
+  const live = liveWeight(filmP);
+  if (plan && live < 1) {
+    storyPose(filmP, plan, reduced ? 0 : seconds, shot, path.name === "cinematic" ? rig.base : null);
+    rig.applyStory(shot, live);
+  }
+  const onScreen = plan !== null && requestAt(filmP, plan, requestPos);
+  beacon.update(onScreen ? requestPos : null, dt, seconds, reduced);
   renderer.info.reset();
   path.frame(dt, (now - start) / 1000, rig.camera, rig.base);
 

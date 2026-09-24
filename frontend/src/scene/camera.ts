@@ -1,11 +1,15 @@
 /**
- * Camera until M2's scroll path: a slow cinematic drift around the archipelago plus subtle pointer
- * parallax, framed per render path (Cinematic sits low over the water, stylised higher so the
- * layout reads). Always drifting, EXCEPT under prefers-reduced-motion: then the camera holds still
- * and pointer parallax is off (the OS setting outranks the cinematic brief).
+ * The live camera: a slow cinematic drift around the archipelago plus subtle pointer parallax,
+ * framed per render path (Cinematic sits low over the water, stylised higher so the layout reads).
+ * Always drifting, EXCEPT under prefers-reduced-motion: then the camera holds still and pointer
+ * parallax is off (the OS setting outranks the cinematic brief).
+ *
+ * During the scroll film (scene/story.ts) main.ts overrides it with applyStory(): the film's shot,
+ * cross-fading into this live camera as the film ends.
  */
 import * as THREE from "three";
 import type { RenderPath } from "../render/path";
+import type { Pose } from "./story";
 
 const DRIFT_RAD_PER_S = 0.03;
 const SWEEP_PERIOD_S = 110;
@@ -19,7 +23,7 @@ export class CameraRig {
   private islands: { x: number; z: number }[] = [];
   private sweepPhase = 0;
   /** Composition anchor (no drift, no parallax), shared with render paths for placement. */
-  readonly base = { eye: new THREE.Vector3(), target: new THREE.Vector3(), spread: 0.6 };
+  readonly base = { eye: new THREE.Vector3(), target: new THREE.Vector3(), spread: 0.6, focus: 20 };
   private readonly target = new THREE.Vector3();
   private distance = 24;
   private reducedMotion = false;
@@ -27,6 +31,8 @@ export class CameraRig {
   private radius = 10;
   private readonly pointer = new THREE.Vector2();
   private readonly parallax = new THREE.Vector2();
+  /** Where the camera is actually looking (live target, or the film's). */
+  private readonly look = new THREE.Vector3();
 
   constructor() {
     this.camera = new THREE.PerspectiveCamera(42, 1, 0.3, 2000);
@@ -147,11 +153,35 @@ export class CameraRig {
       this.target.z + Math.cos(az) * flat,
     );
     this.camera.lookAt(this.target);
+    this.look.copy(this.target);
+    this.base.focus = this.camera.position.distanceTo(this.look);
   }
 
-  /** Compass heading in degrees, 0 = looking north (-z), clockwise. */
+  /**
+   * Blend the film's shot over the live camera set by tick(): `live` 0 = all film, 1 = all live.
+   * Call after tick(), once per frame. No allocation.
+   */
+  applyStory(shot: Pose, live: number): void {
+    if (live >= 1) return;
+    const c = this.camera.position;
+    c.set(
+      shot.eye.x + (c.x - shot.eye.x) * live,
+      shot.eye.y + (c.y - shot.eye.y) * live,
+      shot.eye.z + (c.z - shot.eye.z) * live,
+    );
+    this.look.set(
+      shot.target.x + (this.target.x - shot.target.x) * live,
+      shot.target.y + (this.target.y - shot.target.y) * live,
+      shot.target.z + (this.target.z - shot.target.z) * live,
+    );
+    this.camera.lookAt(this.look);
+    this.base.focus = this.camera.position.distanceTo(this.look);
+  }
+
+  /** Compass heading in degrees, 0 = looking north (-z), clockwise; follows the actual view. */
   get heading(): number {
-    const deg = THREE.MathUtils.radToDeg(Math.PI - this.azimuth);
+    const az = Math.atan2(this.camera.position.x - this.look.x, this.camera.position.z - this.look.z);
+    const deg = THREE.MathUtils.radToDeg(Math.PI - az);
     return ((deg % 360) + 360) % 360;
   }
 }

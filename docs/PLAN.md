@@ -26,7 +26,8 @@ Palette: deep teal water, violet-pink dusk sky, warm lantern accents, status col
 
 ## 3. Scroll storyboard (story mode)
 
-Scroll progress `p in [0,1]` scrubs one GSAP timeline; the camera rides a `CatmullRomCurve3`.
+Scroll progress `p in [0,1]` drives pure shot functions (`scene/story.ts`); the camera cross-fades
+between shots that are continuous in p (M2: native scroll, no Lenis/GSAP - see the M2 notes).
 Story mode is **scripted** (deterministic, uses the demo incident) so it always plays well; live mode
 binds the real data.
 
@@ -70,12 +71,23 @@ foundations come before spectacle.
     device has been chosen or tested yet (PERFORMANCE.md). Measured so far: see HANDOVER.
   - [x] Tier auto-downgrade tested (`quality/governor.test.ts`: down, up, hysteresis, back-off, pauses)
 
-### M2 - Scroll movie (chapters 1-3)
-- Lenis smooth scroll + GSAP ScrollTrigger scrubbing a master timeline; camera curve; chapter overlays.
-- `prefers-reduced-motion` path (no smooth scroll, reduced camera motion, chapter cards instead).
-- Touch/mobile behaviour; chapter jump navigation; keyboard accessible.
-- **Accept:** no scroll jank (main thread < 8 ms/frame during scroll on Low tier); works on iOS Safari,
-  Android Chrome, desktop Firefox/Chrome; reduced-motion verified.
+### M2 - Scroll movie (chapters 1-3) (built 2026-09-24)
+- [x] Scroll film over all six chapters (camera for 4-5 too; their weather visuals are M3): aerial,
+  the request arriving and hopping along the live route, the slow island, wide, hand-over to live.
+- [x] Chapter cards (HTML, sticky), chapter rail + skip link (plain anchors, deep-linkable), route
+  names written from the topology.
+- [x] `prefers-reduced-motion`: one still per chapter (cuts), no drift, no smooth scrolling.
+- [x] Touch/phones: native scroll, cards re-laid out, no horizontal overflow (E2E at 390x844).
+- **Deviation (written reason):** native scroll + an eased progress value instead of Lenis + GSAP
+  ScrollTrigger. Same scrub feel, 0 KB, no scroll hijacking (a11y, iOS momentum), camera math stays
+  pure and unit-tested. `gsap` and `lenis` were never imported and are removed from package.json.
+- **Accept:**
+  - [x] Scroll adds no main-thread cost over idle on Low (`scripts/perf-scroll.mjs`: 4.7 vs 5.4 ms/frame
+    headless SwiftShader, no throttle); a mid-scroll shader-compile stall was found and fixed.
+    At 4x CPU throttle this VM is 9.6-15 ms/frame scrolling OR idle (software GL baseline, not the film).
+  - [x] Reduced motion verified (E2E: camera still within a chapter, cut between chapters).
+  - [ ] iOS Safari, Android Chrome, desktop Firefox - **not verified** (no devices/browsers here);
+    only headless Chromium at desktop and 390x844 phone size.
 
 ### M3 - Data-driven visuals (chapters 4-5)
 - `InstancedMesh` request particles with GPU vertex animation (CPU cost ~0 regardless of count).

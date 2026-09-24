@@ -49,6 +49,8 @@ mid-tier GPU) and test on real hardware, not only throttled desktop Chrome.
 ## Measurement
 
 - In-app dev overlay (`?debug=1`, dev builds only): fps, frame ms, draw calls, triangles, tier.
+- Scroll cost: `node frontend/scripts/perf-scroll.mjs --tier low [--throttle 4] [--idle 1]` (dev
+  server): renderer main-thread ms per frame while wheel-scrolling the film, vs idle.
 - Chrome Performance panel with 4x CPU throttle for quick checks; real-device checks before each milestone closes.
 - Lighthouse CI budget (M6). Bundle-size check in CI (fail on > budget).
 - Record results per milestone in `docs/HANDOVER.md` so regressions are visible.
