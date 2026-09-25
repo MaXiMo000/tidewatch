@@ -11,6 +11,7 @@
  * It is recomputed only when the topology or the camera's base framing changes.
  */
 import * as THREE from "three";
+import { pinPositionAttribute } from "../scene/instancing";
 import { params } from "../render/params";
 import type { WorldModel } from "../scene/model";
 import { leafClusterTexture, mossTexture, mulberry32 } from "./textures";
@@ -48,6 +49,19 @@ function withSway(
     shader.uniforms["uGlowColor"] = shared.uGlowColor;
     shader.fragmentShader = shader.fragmentShader
       .replace("#include <common>", "#include <common>\nvarying float vTrans;\nuniform vec3 uGlowColor;")
+      // Mip-aware alpha: mipmaps average thin needles away, so alpha-tested cards shrink and go
+      // bald with distance. Scaling alpha by the mip level keeps far crowns full and feathery.
+      .replace(
+        "#include <alphatest_fragment>",
+        `#ifdef USE_MAP
+        {
+          vec2 texel = vMapUv * vec2(textureSize(map, 0));
+          float lod = max(0.0, 0.5 * log2(max(dot(dFdx(texel), dFdx(texel)), dot(dFdy(texel), dFdy(texel)))));
+          diffuseColor.a *= 1.0 + lod * 0.3;
+        }
+        #endif
+        #include <alphatest_fragment>`,
+      )
       .replace(
         "#include <emissivemap_fragment>",
         `#include <emissivemap_fragment>
@@ -83,6 +97,84 @@ function withSway(
   };
   material.customProgramCacheKey = () => `tw-sway-${key}`;
   return material;
+}
+
+/**
+ * Floating things (pads, flowers): each instance turns slowly on the current and rides the swell.
+ * Rotation happens about the instance's own centre, before the instance matrix.
+ */
+function withBob(material: THREE.MeshStandardMaterial, key: string): THREE.MeshStandardMaterial {
+  material.onBeforeCompile = (shader) => {
+    shader.uniforms["uTime"] = shared.uTime;
+    shader.uniforms["uWind"] = shared.uWind;
+    shader.vertexShader = shader.vertexShader
+      .replace("#include <common>", "#include <common>\nuniform float uTime;\nuniform float uWind;")
+      .replace(
+        "#include <begin_vertex>",
+        /* glsl */ `#include <begin_vertex>
+        #ifdef USE_INSTANCING
+        {
+          float ph = instanceMatrix[3].x * 0.71 + instanceMatrix[3].z * 0.53;
+          float yaw = sin(uTime * 0.11 + ph) * 0.5 * uWind;
+          float c = cos(yaw);
+          float s = sin(yaw);
+          transformed.xz = mat2(c, -s, s, c) * transformed.xz;
+          transformed.y += (sin(uTime * 0.9 + ph * 3.0) * 0.5 + 0.5) * 0.02 * uWind
+            + sin(uTime * 1.3 + ph + transformed.x * 2.0) * 0.012 * uWind;
+        }
+        #endif`,
+      );
+  };
+  material.customProgramCacheKey = () => `tw-bob-${key}`;
+  return material;
+}
+
+/**
+ * A water lily in bloom (unit size, base at y=0): two rings of pointed, cupped petals around a gold
+ * centre, coloured by vertex (white tips over a blush base). 36 triangles.
+ */
+function lilyFlowerGeometry(): THREE.BufferGeometry {
+  const pos: number[] = [];
+  const col: number[] = [];
+  const base = new THREE.Color(0xe7a9b8);
+  const tip = new THREE.Color(0xfff6f2);
+  const gold = new THREE.Color(0xf2c14e);
+  const v = (x: number, y: number, z: number, c: THREE.Color): void => {
+    pos.push(x, y, z);
+    col.push(c.r, c.g, c.b);
+  };
+  const rings = [
+    { n: 8, len: 1, rise: 0.35, half: 0.2, off: 0 },
+    { n: 8, len: 0.7, rise: 0.62, half: 0.24, off: Math.PI / 8 },
+  ];
+  for (const r of rings) {
+    for (let i = 0; i < r.n; i++) {
+      const a = r.off + (i / r.n) * Math.PI * 2;
+      const at = (ang: number, d: number, y: number): [number, number, number] => [Math.cos(ang) * d, y, Math.sin(ang) * d];
+      const [lx, ly, lz] = at(a - r.half, r.len * 0.45, r.rise * 0.35);
+      const [rx, ry, rz] = at(a + r.half, r.len * 0.45, r.rise * 0.35);
+      const [tx, ty, tz] = at(a, r.len, r.rise);
+      // Folded along the midrib: two triangles meeting at a raised centre line.
+      v(0, 0.05, 0, base);
+      v(lx, ly, lz, base);
+      v(tx, ty, tz, tip);
+      v(0, 0.05, 0, base);
+      v(tx, ty, tz, tip);
+      v(rx, ry, rz, base);
+    }
+  }
+  // Gold stamens: a small raised fan in the middle.
+  for (let i = 0; i < 4; i++) {
+    const a = (i / 4) * Math.PI * 2;
+    v(0, 0.08, 0, gold);
+    v(Math.cos(a) * 0.18, 0.28, Math.sin(a) * 0.18, gold);
+    v(Math.cos(a + 1.2) * 0.18, 0.28, Math.sin(a + 1.2) * 0.18, gold);
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute("color", new THREE.Float32BufferAttribute(col, 3));
+  g.computeVertexNormals();
+  return g;
 }
 
 /** Unit bald-cypress trunk (height 1): strongly flared buttress base, gentle taper. */
@@ -145,6 +237,7 @@ interface Batch {
 
 function batch(geometry: THREE.BufferGeometry, material: THREE.Material, capacity: number): Batch {
   const mesh = new THREE.InstancedMesh(geometry, material, capacity);
+  pinPositionAttribute(material);
   mesh.count = 0;
   mesh.frustumCulled = false; // instances span the whole world; one bounds test would be wrong
   return { mesh, count: 0 };
@@ -215,13 +308,17 @@ export class Foliage {
       0.02,
       "reed",
     );
-    const pad = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.72, metalness: 0 });
-    const flower = new THREE.MeshStandardMaterial({
-      color: 0xf4e6ea,
-      emissive: 0xf4d6dc,
-      emissiveIntensity: 0.35,
-      roughness: 0.6,
-    });
+    const pad = withBob(new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.72, metalness: 0 }), "pad");
+    const flower = withBob(
+      new THREE.MeshStandardMaterial({
+        vertexColors: true,
+        side: THREE.DoubleSide,
+        emissive: 0xf4d6dc,
+        emissiveIntensity: 0.18,
+        roughness: 0.6,
+      }),
+      "flower",
+    );
     this.trunks = batch(trunkGeometry(), bark, MAX_TREES);
     // Capacities: up to 6 branches, 13 clumps x 10 cards and ~26 moss strands per tree.
     this.branches = batch(branchGeometry(), bark, MAX_TREES * 7);
@@ -245,7 +342,7 @@ export class Foliage {
     );
     this.bushes = batch(cardGeometry(false), bush, MAX_TREES * 30);
     this.pads = batch(lilyGeometry(), pad, 900);
-    this.flowers = batch(new THREE.IcosahedronGeometry(0.16, 0), flower, 60);
+    this.flowers = batch(lilyFlowerGeometry(), flower, 60);
     this.reeds = batch(reedGeometry(), reed, 900);
     for (const b of [this.trunks, this.branches, this.leaves, this.moss, this.knees, this.mounds, this.bushes, this.pads, this.flowers, this.reeds]) {
       this.root.add(b.mesh);
@@ -443,8 +540,8 @@ export class Foliage {
         this.c.setHSL(0.26 + rnd() * 0.07, 0.4 + rnd() * 0.2, 0.035 + rnd() * 0.04);
         this.push(this.pads, this.p, this.q, this.s, this.c);
         if (rnd() < 0.05 && this.flowers.count < this.flowers.mesh.instanceMatrix.count) {
-          this.p.y = 0.08;
-          this.s.set(1, 0.6, 1);
+          this.p.y = 0.03;
+          this.s.setScalar(0.2 + rnd() * 0.08);
           this.push(this.flowers, this.p, this.q, this.s);
         }
       }
@@ -533,15 +630,16 @@ export class Foliage {
       const r = height * (0.08 + rnd() * 0.08);
       clumps.push(new THREE.Vector3(Math.cos(a) * r, height * (0.62 + rnd() * 0.3), Math.sin(a) * r));
     }
-    // Small far trees get fewer, bigger cards (fog eats detail; saves triangles).
+    // Small far trees get fewer, bigger cards (fog eats detail; saves triangles). Near crowns use
+    // 8-10 cards per clump: the spray texture with mip-aware alpha fills more per card than before.
     const far = height < 11;
     for (const c of clumps) {
-      const cards = far ? 5 + Math.floor(rnd() * 2) : 10 + Math.floor(rnd() * 4);
+      const cards = far ? 5 + Math.floor(rnd() * 2) : 8 + Math.floor(rnd() * 3);
       const spread = height * 0.1;
       for (let k = 0; k < cards; k++) {
         const cp = c.clone().add(new THREE.Vector3((rnd() - 0.5) * spread * 2, (rnd() - 0.3) * spread * 0.8, (rnd() - 0.5) * spread * 2));
         const cq = new THREE.Quaternion().setFromEuler(this.e.set((rnd() - 0.5) * 0.9, rnd() * Math.PI, (rnd() - 0.5) * 0.5));
-        const size = height * (far ? 0.2 + rnd() * 0.08 : 0.13 + rnd() * 0.09);
+        const size = height * (far ? 0.2 + rnd() * 0.08 : 0.15 + rnd() * 0.09);
         this.m2.compose(cp, cq, new THREE.Vector3(size, size * 0.8, size));
         this.m.multiplyMatrices(treeM, this.m2);
         this.pushMatrix(this.leaves, this.m, this.leafTint(rnd));

@@ -221,9 +221,11 @@ void main() {
   // Grade: teal shadows, warm-pink highlights, a touch more saturation in the mids.
   float l = dot(c, vec3(0.2126, 0.7152, 0.0722));
   c += mix(vec3(-0.006, 0.014, 0.012), vec3(0.022, -0.004, 0.01), smoothstep(0.08, 0.75, l));
-  c = mix(vec3(l), c, 1.06);
+  c = mix(vec3(l), c, 1.08);
+  // Lift the deepest blacks a hair toward teal: shadows keep their shape instead of crushing.
+  c = c * 0.975 + vec3(0.006, 0.012, 0.014);
   vec2 q = (vUv - 0.5) * vec2(uAspect, 1.0);
-  c *= 1.0 - smoothstep(0.45, 1.15, length(q)) * 0.5;
+  c *= 1.0 - smoothstep(0.5, 1.2, length(q)) * 0.42;
   c += (hash(vUv * 1024.0 + fract(uTime * 13.7) * 91.0) - 0.5) * uGrain;
   gl_FragColor = vec4(srgb(clamp(c, 0.0, 1.0)), 1.0);
 }

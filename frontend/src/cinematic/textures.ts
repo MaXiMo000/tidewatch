@@ -22,8 +22,10 @@ function canvasTexture(draw: (ctx: CanvasRenderingContext2D, size: number) => vo
 }
 
 /**
- * A clump of bald-cypress foliage: a dense, slightly lumpy core that frays into feathery needle
- * sprays at the edge. Tips are lighter so backlight catches them. 512 px so it holds up close.
+ * A clump of bald-cypress foliage: layered pinnate sprays (a twig with needle pairs, feathering out
+ * from a few branchlets), no solid core, so the card edge is ragged and light shows through gaps.
+ * Back layers are drawn darker and front layers lighter, then the whole card is shaded top-lit,
+ * which gives each flat card a sense of volume. 512 px so it holds up close.
  */
 export function leafClusterTexture(): THREE.CanvasTexture {
   return canvasTexture((ctx, s) => {
@@ -31,50 +33,79 @@ export function leafClusterTexture(): THREE.CanvasTexture {
     ctx.clearRect(0, 0, s, s);
     const cx = s / 2;
     const cy = s * 0.5;
-    // Core: overlapping lumpy blobs -> a solid mass at distance (mip levels).
-    for (let i = 0; i < 140; i++) {
-      const a = rnd() * Math.PI * 2;
-      const r = Math.pow(rnd(), 0.7) * s * 0.3;
-      const x = cx + Math.cos(a) * r;
-      const y = cy + Math.sin(a) * r * 0.72;
-      const rad = s * (0.025 + rnd() * 0.05);
-      const g = 18 + Math.floor(rnd() * 26);
-      ctx.fillStyle = `rgba(${g - 4},${g + 16},${g - 2},0.96)`;
-      ctx.beginPath();
-      ctx.ellipse(x, y, rad, rad * (0.55 + rnd() * 0.4), rnd() * Math.PI, 0, Math.PI * 2);
-      ctx.fill();
-    }
-    // Sprays: flat feathery twigs radiating out and drooping, needles alternating both sides.
-    const sprays = 70;
-    for (let i = 0; i < sprays; i++) {
-      const a = rnd() * Math.PI * 2;
-      const r0 = s * (0.12 + rnd() * 0.2);
-      let x = cx + Math.cos(a) * r0;
-      let y = cy + Math.sin(a) * r0 * 0.72;
-      const len = s * (0.08 + rnd() * 0.13);
-      const dir = a + (rnd() - 0.5) * 0.7;
-      const droop = 0.2 + rnd() * 0.5;
-      const steps = 16;
+    ctx.lineCap = "round";
+    /** One flat spray: a gently curving twig with alternating needles, lighter toward the tip. */
+    const spray = (x: number, y: number, dir: number, len: number, shade: number, width: number): void => {
+      const steps = Math.max(6, Math.round(len / (s * 0.012)));
+      const bend = (rnd() - 0.5) * 0.9;
+      const droop = 0.15 + rnd() * 0.45;
+      let a = dir;
       for (let k = 0; k < steps; k++) {
         const t = k / steps;
-        const dx = Math.cos(dir) * (len / steps);
-        const dy = Math.sin(dir) * (len / steps) + droop * (len / steps) * t * 2;
-        x += dx;
-        y += dy;
-        const needle = s * 0.022 * (1 - t * 0.55);
-        const nx = -dy / Math.hypot(dx, dy);
-        const ny = dx / Math.hypot(dx, dy);
-        const light = Math.floor(22 + t * 34 + rnd() * 14);
-        ctx.strokeStyle = `rgba(${light - 2},${light + 22},${light + 2},${0.9 - t * 0.2})`;
-        ctx.lineWidth = Math.max(1, s * 0.0045);
+        a += bend / steps + droop * 0.05 * Math.cos(a); // cos(a) turns any heading toward "down"
+        const dx = Math.cos(a) * (len / steps);
+        const dy = Math.sin(a) * (len / steps);
+        // Twig
+        const light = shade + t * 38 + rnd() * 10;
+        ctx.strokeStyle = `rgba(${Math.floor(light * 0.62)},${Math.floor(light * 0.78)},${Math.floor(light * 0.42)},0.95)`;
+        ctx.lineWidth = Math.max(1, width * (1 - t * 0.6));
         ctx.beginPath();
         ctx.moveTo(x, y);
-        ctx.lineTo(x + nx * needle + dx * 0.6, y + ny * needle + dy * 0.6);
-        ctx.moveTo(x, y);
-        ctx.lineTo(x - nx * needle + dx * 0.6, y - ny * needle + dy * 0.6);
+        ctx.lineTo(x + dx, y + dy);
         ctx.stroke();
+        x += dx;
+        y += dy;
+        // Needle pair, swept forward, shortening toward the tip.
+        const needle = s * (0.03 - t * 0.017) * (0.8 + rnd() * 0.4);
+        const g = Math.floor(light + 6 + rnd() * 18);
+        ctx.strokeStyle = `rgba(${Math.floor(g * 0.66)},${g},${Math.floor(g * 0.4)},${0.92 - t * 0.25})`;
+        ctx.lineWidth = Math.max(1, s * 0.004);
+        for (const side of [-1, 1]) {
+          const na = a + side * (0.95 + rnd() * 0.25);
+          ctx.beginPath();
+          ctx.moveTo(x, y);
+          ctx.lineTo(x + Math.cos(na) * needle, y + Math.sin(na) * needle);
+          ctx.stroke();
+        }
+      }
+    };
+    // Three depth layers: back (dark, broad), middle, front (light, fewer). Each branchlet from
+    // near the centre forks into several sprays, so the clump reads as foliage, not a blob.
+    const layers = [
+      { n: 16, shade: 34, reach: 0.34 },
+      { n: 14, shade: 62, reach: 0.3 },
+      { n: 10, shade: 92, reach: 0.24 },
+    ];
+    for (const layer of layers) {
+      for (let i = 0; i < layer.n; i++) {
+        const a = rnd() * Math.PI * 2;
+        const r0 = s * rnd() * 0.08;
+        const bx = cx + Math.cos(a) * r0;
+        const by = cy + Math.sin(a) * r0 * 0.7;
+        const forks = 2 + Math.floor(rnd() * 3);
+        for (let f = 0; f < forks; f++) {
+          const dir = a + (f - forks / 2) * 0.35 + (rnd() - 0.5) * 0.3;
+          const along = s * layer.reach * (0.15 + f * 0.12) * rnd();
+          spray(
+            bx + Math.cos(a) * along,
+            by + Math.sin(a) * along * 0.7,
+            dir,
+            s * layer.reach * (0.45 + rnd() * 0.45),
+            layer.shade,
+            s * 0.006,
+          );
+        }
       }
     }
+    // Top-lit volume: brighten the upper half, deepen the underside (keeps alpha untouched).
+    ctx.globalCompositeOperation = "source-atop";
+    const shade = ctx.createLinearGradient(0, 0, 0, s);
+    shade.addColorStop(0, "rgba(214,226,150,0.22)");
+    shade.addColorStop(0.5, "rgba(0,0,0,0)");
+    shade.addColorStop(1, "rgba(4,10,6,0.45)");
+    ctx.fillStyle = shade;
+    ctx.fillRect(0, 0, s, s);
+    ctx.globalCompositeOperation = "source-over";
   }, 512);
 }
 

@@ -14,6 +14,9 @@ import type { WorldModel } from "../scene/model";
 import { makeWaterNormalMap } from "./noise";
 import { Boats } from "../scene/boats";
 import { WakeField } from "./boats";
+import { Beams } from "../scene/beam";
+import { Birds } from "../scene/birds";
+import { Smoke } from "../scene/smoke";
 import { Drama } from "./drama";
 import { Foliage } from "./foliage";
 import { Islands } from "../scene/islands";
@@ -37,6 +40,13 @@ class CinematicPath implements RenderPath {
   private readonly post = new CinematicPost();
   private readonly sun = new THREE.DirectionalLight(0xffd2b8, 2.2);
   private readonly hemi = new THREE.HemisphereLight(0x8f86b8, 0x0c1f1c, 0.35);
+  /**
+   * Moonlight from over the viewer's shoulder: the low sun sits BEHIND the archipelago, which left
+   * every door and window wall in black shadow. A cool, shadowless fill models the fronts (and keeps
+   * offline islands readable as shapes) without flattening the backlit silhouettes.
+   */
+  private readonly moon = new THREE.DirectionalLight(0xa9bddc, 0.7);
+  private readonly moonOffset = new THREE.Vector3();
   private readonly fog = new THREE.FogExp2(0x5f8f86, 0.004);
   private readonly pmrem: THREE.PMREMGenerator;
   private envTarget: THREE.WebGLRenderTarget | null = null;
@@ -48,6 +58,10 @@ class CinematicPath implements RenderPath {
   private readonly boats = new Boats();
   private readonly wakes = new WakeField(this.boats);
   private readonly drama = new Drama();
+  private readonly birds = new Birds();
+  private readonly smoke = new Smoke();
+  private readonly beams = new Beams();
+  private readonly emitters: THREE.Vector4[] = [];
   private wakeFit = -1;
 
   constructor(
@@ -60,8 +74,8 @@ class CinematicPath implements RenderPath {
     this.envScene.add(this.envSky.mesh);
     this.water = new CinematicWater(this.normalMap);
     this.scene.fog = this.fog;
-    this.scene.add(this.sky.mesh, this.water.mesh, this.sun, this.sun.target, this.hemi);
-    this.scene.add(this.islands.root, this.foliage.root, this.boats.mesh, this.drama.root);
+    this.scene.add(this.sky.mesh, this.water.mesh, this.sun, this.sun.target, this.hemi, this.moon, this.moon.target);
+    this.scene.add(this.islands.root, this.foliage.root, this.boats.mesh, this.drama.root, this.birds.mesh, this.smoke.mesh, this.beams.mesh);
     // One soft shadow cascade over the archipelago (islets and structures cast and receive).
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
@@ -140,6 +154,9 @@ class CinematicPath implements RenderPath {
     this.water.setSurface(this.wakes.texture, this.wakes.rect, this.islands.shores, this.drama.rain);
     this.foliage.update(this.model, view);
     this.foliage.tick(t, this.reducedMotion, this.sunDir);
+    this.birds.tick(t, view, this.reducedMotion);
+    this.smoke.update(this.emitters, this.islands.emitters("smoke", this.emitters), t);
+    this.beams.update(this.emitters, this.islands.emitters("lamps", this.emitters), t);
     // Shadow frustum fitted to the archipelago, lit from the low sun (raised a little so shadows
     // stay short enough to read).
     const b = this.model.bounds;
@@ -151,6 +168,12 @@ class CinematicPath implements RenderPath {
     sc.near = 1;
     sc.far = 160;
     sc.updateProjectionMatrix();
+    // Moon: from the camera side, high and a little to the right of the view axis.
+    this.moonOffset.copy(view.eye).sub(view.target).setY(0).normalize();
+    this.moonOffset.set(this.moonOffset.x - this.moonOffset.z * 0.6, 0, this.moonOffset.z + this.moonOffset.x * 0.6);
+    this.moon.target.position.set(b.cx, 0, b.cz);
+    this.moon.position.set(b.cx + this.moonOffset.x * 40, 34, b.cz + this.moonOffset.z * 40);
+    this.moon.intensity = 0.7 * (1 - this.model.storm * 0.5) + this.drama.flash * 1.5;
     // The sky darkens with the failing share and lights up with each lightning strike.
     this.sky.tick(t, Math.min(1, this.model.storm * 1.8), camera, this.drama.flash);
     this.sun.intensity = 2.2 * (1 - this.model.storm * 0.6) + this.drama.flash * 2.5;
@@ -195,6 +218,9 @@ class CinematicPath implements RenderPath {
     this.drama.dispose();
     this.islands.dispose();
     this.foliage.dispose();
+    this.birds.dispose();
+    this.smoke.dispose();
+    this.beams.dispose();
     this.post.dispose();
     this.water.dispose();
     this.envTarget?.dispose();

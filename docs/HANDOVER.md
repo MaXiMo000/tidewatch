@@ -3,14 +3,34 @@
 Audience: Claude Code (or any engineer) picking this project up cold. Read this file, then
 `CLAUDE.md`, then the milestone you are working on in `docs/PLAN.md`.
 
-## 0. Current state: all merged (M0-M6, island batching #24, release prep #25); owner: tag + Render
+## 0. Current state: v0.1.0 released; art pass (PR #27) in review; owner: Render
+
+**2026-09-25 (local session):** `v0.1.0` tagged and released by the workflow
+(https://github.com/MaXiMo000/tidewatch/releases/tag/v0.1.0). Live mode runs locally: AniNest
+answers `ok` (its token is set on Render); LabLedger and Quiz-App are 503 (suspended). Quiz-App's
+source URL must be its **backend** (`quiz-app-backend-0ina`), not `quiz-app-cp2h` (the frontend,
+which answers 200 HTML -> "invalid payload"). Branch `art/cinematic-life`: new leaf-spray texture
+with mip-aware alpha (crowns no longer read as dark slabs), petalled water lilies, drifting/bobbing
+pads, a heron flock (`cinematic/birds.ts`, frustum test), a floating camera. Budget impact on
+Cinematic: +1.2k triangles (370.7k / 400k), +2 draw calls (78 / 200). Not verified on a real
+GPU: the in-app browser runs Cinematic at ~17 fps, so the herons were checked by test, not by eye.
+
+**Art pass round 2 (same branch):** islands detailed (frames, doors, railings, props, boulders,
+rowboat) and surfaced in the shader (`scene/surfaces.ts`); chimney smoke and a sweeping lighthouse
+beam (`scene/smoke.ts`, `scene/beam.ts`, also on Balanced); herons on Balanced (moved to `scene/`);
+moon fill light, exposure 0.92, lighter vignette; flat tiers get baked per-face colour and green
+trees. Near-tree crowns use 8-10 cards per clump (was 10-13) to pay for it. **Perf trap found:**
+`scene/instancing.ts` (see PERFORMANCE.md technique 3). `node scripts/perf.mjs` on this laptop
+(headless Chrome, D3D11, 1440x900, throttled so compare only relative): High 39 fps / 4.8 ms / 80
+calls / 358k tris (before this round: 37 / 9.1 / 76 / 371k); Medium 53 / 1.1 / 11 / 13.7k; Low 27 /
+1.0 / 8 / 7.1k. Not verified: real discrete/Apple GPUs, phones, Firefox/Safari, reduced motion by eye.
 
 **M5 live data is merged** (PR #16): metrics add-ons in AniNest/Quiz-App/LabLedger (`addons/`),
 `LiveSource`, offline islands, Render deployment files, owner risk acceptance in SECURITY.md.
 LabLedger and Quiz-App show **offline** until they are redeployed next month.
 
 **Owner, remaining (2026-09-24):**
-1. **Tag v0.1.0** from a local clone: `git fetch origin && git tag -a v0.1.0 origin/main -m "Tidewatch
+1. ~~**Tag v0.1.0**~~ (done 2026-09-25) from a local clone: `git fetch origin && git tag -a v0.1.0 origin/main -m "Tidewatch
    v0.1.0" && git push origin v0.1.0` (the cloud session's git proxy refuses tag pushes, HTTP 403).
    Push the tag from the CLI, not "Draft a new release": the workflow creates the release itself.
 2. **Render: blocked by the free-instance limit.** The Blueprint sync (`render.yaml`) failed with no

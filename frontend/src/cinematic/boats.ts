@@ -5,6 +5,7 @@
  * attributes and path GLSL, so the CPU never needs to know where a boat is.
  */
 import * as THREE from "three";
+import { pinPositionAttribute } from "../scene/instancing";
 import { BOAT_PATH, type Boats } from "../scene/boats";
 import type { WorldModel } from "../scene/model";
 
@@ -88,6 +89,7 @@ export class WakeField {
       depthWrite: false,
     });
     this.splatMesh = new THREE.InstancedMesh(splatGeo, this.splat, 96);
+    pinPositionAttribute(this.splat);
     this.splatMesh.frustumCulled = false;
     this.splatScene.add(this.splatMesh);
     this.boats = boats;
