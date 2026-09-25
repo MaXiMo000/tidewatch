@@ -4,6 +4,7 @@
  * and opacity live in dynamic attributes the islands rewrite each frame (~30 instances).
  */
 import * as THREE from "three";
+import { pinPositionAttribute } from "./instancing";
 
 const MAX = 128;
 
@@ -48,6 +49,7 @@ export class GlowBatch {
       blending: THREE.AdditiveBlending,
     });
     this.mesh = new THREE.Mesh(this.geo, material);
+    pinPositionAttribute(material);
     this.mesh.frustumCulled = false;
     this.mesh.renderOrder = 5;
   }

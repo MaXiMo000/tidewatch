@@ -133,12 +133,12 @@ backend serves both during a deprecation window.
 | --- | --- | --- | --- |
 | Code | `src/cinematic/` - separate lazy chunk, imported only on High after first paint | `render/stylised.ts` (main bundle) | same as Balanced |
 | Sky | HDR dusk dome, fbm clouds lit from below, small moon/sun; PMREM environment | gradient shader + 1 cloud band | gradient shader |
-| Lighting | ACES tone mapping (post), 1 directional light + 1 soft PCF shadow cascade, hemisphere + PMREM | hemisphere + directional, no shadows | same |
+| Lighting | ACES tone mapping (post), 1 directional light + 1 soft PCF shadow cascade, a shadowless cool moon fill from the viewer's side (models the backlit fronts), hemisphere + PMREM | hemisphere + directional, no shadows | same |
 | Water | planar reflection (Reflector, half-float, `reflectionScale`), 3 normal layers, Fresnel, glint column | shader with fake (sky) reflection, animated normals | flat gradient + Fresnel |
 | Atmosphere | half-res raymarched height fog (noise, HG scatter), colour/density follow p95 | FogExp2 | FogExp2 |
-| World | mossy islets with kind-specific structures (lighthouse, tower, stilt hall, beacon, vault, jetty, workshop), instanced cypress (layered spray cards, mip-aware alpha so far crowns stay full) + moss + knees, drifting lily pads and flowers, reeds, a heron flock crossing the far channel | low-poly islands, instanced silhouette treeline (90) | same, 30 trees, no glow sprites |
+| World | mossy islets with kind-specific structures (lighthouse, tower, stilt hall, beacon, vault, jetty, workshop) detailed with frames, doors, railings, props, shore boulders and a moored rowboat, surfaced procedurally in the shader (`scene/surfaces.ts`: planks, shingles, stone courses, red/white lighthouse bands, rock grain, bump) at zero triangle cost; instanced cypress (layered spray cards, mip-aware alpha so far crowns stay full) + moss + knees, drifting lily pads and flowers, reeds, a heron flock crossing the far channel | low-poly islands with baked per-face colour (tone jitter, lighthouse bands, mossy roofs), vertex-coloured cypress treeline (90), heron flock | same, 30 trees, no glow sprites, no herons |
 | Post | bloom (lanterns/glint only), half-res height fog, depth AO + light shafts, subtle DOF, ACES, teal/pink grade, light CA, vignette, grain, lightning flash | CSS vignette | CSS vignette |
-| Requests / health | boats + wakes, shore foam, amber pulse / red flicker, storm clouds, rain, lightning, fireflies | boats, amber pulse / red flicker | boats, pulse/flicker, no glow |
+| Requests / health | boats + wakes, shore foam, amber pulse / red flicker, storm clouds, rain, lightning, fireflies, chimney smoke and a sweeping lighthouse beam (both go dark with an offline island) | boats, amber pulse / red flicker, chimney smoke, lighthouse beam | boats, pulse/flicker, no glow |
 | Pixel ratio cap / target fps | 2 / 60 | 1.5 / 60 | 1 / 30 |
 
 Shared by all paths: `scene/model.ts` (layout, eased values, counts, latency, storm), the camera

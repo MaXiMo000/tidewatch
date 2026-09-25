@@ -10,6 +10,7 @@
  * goes down over the last part of the channel instead of docking. Deterministic, all on the GPU.
  */
 import * as THREE from "three";
+import { pinPositionAttribute } from "./instancing";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import type { WorldModel } from "./model";
 import { mulberry32 } from "./random";
@@ -129,6 +130,7 @@ export class Boats {
     };
     material.customProgramCacheKey = () => "tw-boat";
     this.mesh = new THREE.InstancedMesh(geometry, material, MAX_BOATS);
+    pinPositionAttribute(material);
     this.mesh.count = 0;
     this.mesh.frustumCulled = false;
   }

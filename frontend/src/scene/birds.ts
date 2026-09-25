@@ -5,8 +5,9 @@
  * shader beats the wings. Hidden under prefers-reduced-motion.
  */
 import * as THREE from "three";
+import { pinPositionAttribute } from "./instancing";
 import type { ViewBase } from "../render/path";
-import { mulberry32 } from "../scene/random";
+import { mulberry32 } from "./random";
 
 const MAX_BIRDS = 9;
 /** Seconds between the starts of two passes, and how fast the flock flies (world units/s). */
@@ -75,6 +76,7 @@ export class Birds {
     };
     material.customProgramCacheKey = () => "tw-birds";
     this.mesh = new THREE.InstancedMesh(birdGeometry(), material, MAX_BIRDS);
+    pinPositionAttribute(material);
     this.mesh.count = 0;
     this.mesh.frustumCulled = false;
   }

@@ -3,7 +3,7 @@
 Audience: Claude Code (or any engineer) picking this project up cold. Read this file, then
 `CLAUDE.md`, then the milestone you are working on in `docs/PLAN.md`.
 
-## 0. Current state: v0.1.0 released; Cinematic art pass in review; owner: Render
+## 0. Current state: v0.1.0 released; art pass (PR #27) in review; owner: Render
 
 **2026-09-25 (local session):** `v0.1.0` tagged and released by the workflow
 (https://github.com/MaXiMo000/tidewatch/releases/tag/v0.1.0). Live mode runs locally: AniNest
@@ -14,6 +14,16 @@ with mip-aware alpha (crowns no longer read as dark slabs), petalled water lilie
 pads, a heron flock (`cinematic/birds.ts`, frustum test), a floating camera. Budget impact on
 Cinematic: +1.2k triangles (370.7k / 400k), +2 draw calls (78 / 200). Not verified on a real
 GPU: the in-app browser runs Cinematic at ~17 fps, so the herons were checked by test, not by eye.
+
+**Art pass round 2 (same branch):** islands detailed (frames, doors, railings, props, boulders,
+rowboat) and surfaced in the shader (`scene/surfaces.ts`); chimney smoke and a sweeping lighthouse
+beam (`scene/smoke.ts`, `scene/beam.ts`, also on Balanced); herons on Balanced (moved to `scene/`);
+moon fill light, exposure 0.92, lighter vignette; flat tiers get baked per-face colour and green
+trees. Near-tree crowns use 8-10 cards per clump (was 10-13) to pay for it. **Perf trap found:**
+`scene/instancing.ts` (see PERFORMANCE.md technique 3). `node scripts/perf.mjs` on this laptop
+(headless Chrome, D3D11, 1440x900, throttled so compare only relative): High 39 fps / 4.8 ms / 80
+calls / 358k tris (before this round: 37 / 9.1 / 76 / 371k); Medium 53 / 1.1 / 11 / 13.7k; Low 27 /
+1.0 / 8 / 7.1k. Not verified: real discrete/Apple GPUs, phones, Firefox/Safari, reduced motion by eye.
 
 **M5 live data is merged** (PR #16): metrics add-ons in AniNest/Quiz-App/LabLedger (`addons/`),
 `LiveSource`, offline islands, Render deployment files, owner risk acceptance in SECURITY.md.

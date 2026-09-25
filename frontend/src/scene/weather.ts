@@ -7,6 +7,7 @@
  * Cinematic has its own, heavier version (cinematic/drama.ts).
  */
 import * as THREE from "three";
+import { pinPositionAttribute } from "./instancing";
 import type { WorldModel } from "./model";
 import { PALETTE } from "./palette";
 import { unitNoise } from "./layout";
@@ -64,6 +65,7 @@ export class Weather {
       depthWrite: false,
     });
     this.mesh = new THREE.Mesh(this.geo, material);
+    pinPositionAttribute(material);
     this.mesh.frustumCulled = false;
     this.mesh.renderOrder = 4;
   }

@@ -20,6 +20,7 @@ import { isletScale, type Silhouette, silhouetteFor } from "./silhouette";
 import { GlowBatch } from "./glows";
 import { IslandBatch, MAX_ISLANDS, tagIsland } from "./island-batch";
 import { mulberry32 } from "./random";
+import { withSurface } from "./surfaces";
 
 const STATUS_HEX: Record<Status, number> = {
   ok: 0x3fd0a5,
@@ -55,7 +56,7 @@ function makeMats(flavour: Flavour): Mats {
     flavour === "pbr"
       ? new THREE.MeshStandardMaterial({ color: 0x000000, emissive: hex, emissiveIntensity: intensity, roughness: 0.6 })
       : new THREE.MeshLambertMaterial({ color: 0x000000, emissive: hex, emissiveIntensity: Math.min(intensity, 1.4) });
-  return {
+  const mats: Mats = {
     wood: std(0x4a3a2c, 0.85),
     darkWood: std(0x2c231c, 0.9),
     stone: std(0x5b5760, 0.95),
@@ -81,6 +82,16 @@ function makeMats(flavour: Flavour): Mats {
       offline: glowMaterial(STATUS_HEX.offline, 0.1),
     },
   };
+  if (flavour === "pbr") {
+    // Planks, shingles, stone courses and rock grain drawn in the shader (no extra triangles).
+    withSurface(mats.wood as THREE.MeshStandardMaterial, "wood");
+    withSurface(mats.darkWood as THREE.MeshStandardMaterial, "wood");
+    withSurface(mats.stone as THREE.MeshStandardMaterial, "stone", 0.016);
+    withSurface(mats.paleStone as THREE.MeshStandardMaterial, "stripes", 0.014);
+    withSurface(mats.roof as THREE.MeshStandardMaterial, "roof", 0.014);
+    withSurface(mats.rock as THREE.MeshStandardMaterial, "rock", 0.03);
+  }
+  return mats;
 }
 
 /** Lumpy islet: displaced, flattened icosphere, moss on top, wet dark rock at the waterline. */
@@ -157,7 +168,238 @@ function windowPane(w: number, h: number, m: THREE.Material): THREE.Mesh {
   return new THREE.Mesh(new THREE.PlaneGeometry(w, h), m);
 }
 
-function structure(kind: Silhouette, mats: Mats, status: Status, rnd: () => number): Built {
+/** Anchor names the render paths look for: chimney smoke sources and the lighthouse lamp. */
+export const SMOKE_ANCHOR = "tw-smoke";
+export const LAMP_ANCHOR = "tw-lamp";
+
+function anchor(g: THREE.Group, name: string, x: number, y: number, z: number): void {
+  const a = new THREE.Object3D();
+  a.name = name;
+  a.position.set(x, y, z);
+  g.add(a);
+}
+
+/** A window's frame: sill, lintel and two jambs, standing just proud of the wall (+z facing). */
+function frame(g: THREE.Group, m: THREE.Material, x: number, y: number, z: number, w: number, h: number): void {
+  const t = 0.035;
+  for (const [fx, fy, fw, fh] of [
+    [0, -h / 2 - t / 2, w + t * 3, t * 1.3],
+    [0, h / 2 + t / 2, w + t * 2, t],
+    [-w / 2 - t / 2, 0, t, h],
+    [w / 2 + t / 2, 0, t, h],
+  ] as const) {
+    const b = box(fw, fh, t, m);
+    b.position.set(x + fx, y + fy, z + t / 2);
+    g.add(b);
+  }
+  // Muntin cross: four panes read as a real window, not a glowing slab.
+  const v = box(0.012, h, 0.012, m);
+  v.position.set(x, y, z + 0.008);
+  const hz = box(w, 0.012, 0.012, m);
+  hz.position.set(x, y, z + 0.008);
+  g.add(v, hz);
+}
+
+/** A plank door with a lintel, facing +z. */
+function door(g: THREE.Group, mats: Mats, x: number, y0: number, z: number, w = 0.26, h = 0.46): void {
+  const d = box(w, h, 0.03, mats.darkWood);
+  d.position.set(x, y0 + h / 2, z + 0.015);
+  const lintel = box(w + 0.08, 0.05, 0.05, mats.wood);
+  lintel.position.set(x, y0 + h + 0.025, z + 0.025);
+  const knob = new THREE.Mesh(new THREE.SphereGeometry(0.018, 5, 4), mats.metal);
+  knob.position.set(x + w * 0.32, y0 + h * 0.48, z + 0.04);
+  g.add(d, lintel, knob);
+}
+
+/** Railing along x at height y (posts + top rail), facing +z. */
+function railing(g: THREE.Group, m: THREE.Material, x0: number, x1: number, y: number, z: number): void {
+  const n = Math.max(2, Math.round((x1 - x0) / 0.38) + 1);
+  for (let i = 0; i < n; i++) {
+    const p = box(0.03, 0.3, 0.03, m);
+    p.position.set(x0 + ((x1 - x0) * i) / (n - 1), y + 0.15, z);
+    g.add(p);
+  }
+  const rail = box(x1 - x0 + 0.04, 0.03, 0.035, m);
+  rail.position.set((x0 + x1) / 2, y + 0.3, z);
+  g.add(rail);
+}
+
+/**
+ * Cinematic-only detail on top of the silhouette: frames, doors, railings, props, and the anchors
+ * for chimney smoke and the lighthouse lamp. Balanced/Simple skip it (their triangle budgets are
+ * 20x smaller and the extra detail would not read at their distance anyway).
+ */
+function detail(kind: Silhouette, g: THREE.Group, mats: Mats): void {
+  switch (kind) {
+    case "lighthouse": {
+      door(g, mats, 0, 0.45, 0.39, 0.22, 0.42);
+      for (const y of [1.55, 2.2]) {
+        const w = windowPane(0.08, 0.2, mats.window);
+        w.position.set(0, y, 0.34 - (y - 1.4) * 0.05);
+        g.add(w);
+      }
+      // Gallery railing: a ring of posts and a thin rail around the lamp room.
+      for (let i = 0; i < 12; i++) {
+        const a = (i / 12) * Math.PI * 2;
+        const p = box(0.022, 0.24, 0.022, mats.metal);
+        p.position.set(Math.cos(a) * 0.4, 2.97, Math.sin(a) * 0.4);
+        g.add(p);
+      }
+      const rail = new THREE.Mesh(new THREE.TorusGeometry(0.4, 0.012, 4, 24), mats.metal);
+      rail.rotation.x = Math.PI / 2;
+      rail.position.y = 3.09;
+      g.add(rail);
+      // Lamp-room glazing bars.
+      for (let i = 0; i < 6; i++) {
+        const a = (i / 6) * Math.PI * 2;
+        const bar = box(0.02, 0.42, 0.02, mats.metal);
+        bar.position.set(Math.cos(a) * 0.245, 3.06, Math.sin(a) * 0.245);
+        g.add(bar);
+      }
+      break;
+    }
+    case "tower": {
+      door(g, mats, 0, 0.55, 0.4, 0.26, 0.5);
+      // Flag pole on the roof.
+      const pole = cyl(0.012, 0.015, 0.7, 4, mats.metal);
+      pole.position.set(-0.28, 2.6, -0.28);
+      g.add(pole);
+      break;
+    }
+    case "hall": {
+      for (let i = 0; i < 4; i++) frame(g, mats.darkWood, -0.2 + i * 0.45, 1.05, 0.475, 0.22, 0.26);
+      // The hall's end wall faces +x: the door is on the deck side, at the end.
+      const d = new THREE.Group();
+      door(d, mats, 0, 0.66, 0, 0.26, 0.5);
+      d.rotation.y = Math.PI / 2;
+      d.position.set(1.5, 0, 0);
+      g.add(d);
+      railing(g, mats.darkWood, -0.65, 1.65, 0.66, 0.57);
+      const ridge = box(2.34, 0.05, 0.05, mats.darkWood);
+      ridge.position.set(0.5, 1.94, 0);
+      g.add(ridge);
+      // A rain barrel and a ladder down to the water.
+      const barrel = cyl(0.11, 0.1, 0.26, 8, mats.wood);
+      barrel.position.set(1.62, 0.8, -0.35);
+      g.add(barrel);
+      for (const z of [-0.12, 0.12]) {
+        const side = box(0.03, 0.8, 0.03, mats.darkWood);
+        side.position.set(1.72, 0.3, z);
+        g.add(side);
+      }
+      for (let i = 0; i < 4; i++) {
+        const rung = box(0.03, 0.025, 0.24, mats.darkWood);
+        rung.position.set(1.72, 0.05 + i * 0.17, 0);
+        g.add(rung);
+      }
+      break;
+    }
+    case "beacon": {
+      door(g, mats, -0.16, 0.5, 0.275, 0.16, 0.34);
+      frame(g, mats.darkWood, 0.1, 0.74, 0.275, 0.16, 0.16);
+      const dish = new THREE.Mesh(new THREE.ConeGeometry(0.18, 0.08, 10, 1, true), mats.metal);
+      dish.rotation.x = Math.PI / 2 + 0.4;
+      dish.position.set(0.45, 1.85, 0.12);
+      g.add(dish);
+      break;
+    }
+    case "vault": {
+      // Steps up to the vault door and iron bands on the door.
+      for (let i = 0; i < 3; i++) {
+        const step = box(0.7 - i * 0.1, 0.1, 0.22, mats.stone);
+        step.position.set(0, 0.3 + i * 0.1, 1.22 - i * 0.16);
+        g.add(step);
+      }
+      for (const y of [0.64, 0.86]) {
+        const band = box(0.44, 0.03, 0.02, mats.darkWood);
+        band.position.set(0, y, 1.015);
+        g.add(band);
+      }
+      const post = cyl(0.03, 0.035, 0.7, 5, mats.metal);
+      post.position.set(0.55, 0.75, 0.85);
+      g.add(post);
+      break;
+    }
+    case "jetty": {
+      for (const x of [0.6, 1.7, 2.6]) {
+        const bollard = cyl(0.05, 0.06, 0.18, 7, mats.metal);
+        bollard.position.set(x, 0.47, -0.2);
+        g.add(bollard);
+      }
+      const rope = new THREE.Mesh(new THREE.TorusGeometry(0.1, 0.022, 4, 12), mats.wood);
+      rope.rotation.x = Math.PI / 2;
+      rope.position.set(1.15, 0.4, 0.12);
+      g.add(rope);
+      break;
+    }
+    case "workshop": {
+      door(g, mats, 0.4, 0.55, 0.425, 0.22, 0.46);
+      for (const x of [-0.25, 0.2]) frame(g, mats.darkWood, x - 0.1, 0.92, 0.425, 0.2, 0.22);
+      // Wood pile against the side wall.
+      for (let i = 0; i < 5; i++) {
+        const log = cyl(0.05, 0.05, 0.36, 6, mats.wood);
+        log.rotation.x = Math.PI / 2;
+        log.position.set(-0.68, 0.62 + Math.floor(i / 3) * 0.09, -0.2 + (i % 3) * 0.1 + (i >= 3 ? 0.05 : 0));
+        g.add(log);
+      }
+      break;
+    }
+  }
+}
+
+/**
+ * Shore boulders and a moored rowboat around a Cinematic islet (island-local; the rowboat sits on
+ * the side away from the structure's front so it never hides a door or window).
+ */
+function shoreProps(root: THREE.Group, mats: Mats, radius: number, rnd: () => number): void {
+  const rockCol = new THREE.Color();
+  const n = 4 + Math.floor(rnd() * 3);
+  for (let i = 0; i < n; i++) {
+    const g = new THREE.DodecahedronGeometry(1, 0);
+    const pos = g.getAttribute("position");
+    for (let k = 0; k < pos.count; k++) {
+      pos.setXYZ(k, pos.getX(k) * (0.85 + rnd() * 0.3), pos.getY(k) * (0.6 + rnd() * 0.25), pos.getZ(k) * (0.85 + rnd() * 0.3));
+    }
+    const colours = new Float32Array(pos.count * 3);
+    rockCol.setHSL(0.08, 0.08, 0.14 + rnd() * 0.08);
+    for (let k = 0; k < pos.count; k++) colours.set([rockCol.r, rockCol.g, rockCol.b], k * 3);
+    g.setAttribute("color", new THREE.BufferAttribute(colours, 3));
+    g.computeVertexNormals(); // dodecahedra are already non-indexed: faceted normals as-is
+    const b = new THREE.Mesh(g, mats.rock);
+    const a = rnd() * Math.PI * 2;
+    const r = radius * (0.95 + rnd() * 0.25);
+    const size = 0.12 + rnd() * 0.18;
+    b.scale.setScalar(size);
+    b.position.set(Math.cos(a) * r, 0.02, Math.sin(a) * r);
+    b.rotation.set(rnd(), rnd() * 6, rnd());
+    root.add(b);
+  }
+  // Rowboat: an open bowl hull with two thwarts, tied up behind the islet.
+  const hullGeo = new THREE.SphereGeometry(1, 12, 5, 0, Math.PI * 2, Math.PI / 2, Math.PI / 2);
+  hullGeo.scale(0.5, 0.16, 0.19);
+  const boat = new THREE.Group();
+  const hull = new THREE.Mesh(hullGeo, mats.wood);
+  hull.position.y = 0.1;
+  boat.add(hull);
+  for (const x of [-0.16, 0.14]) {
+    const thwart = box(0.07, 0.02, 0.34, mats.darkWood);
+    thwart.position.set(x, 0.07, 0);
+    boat.add(thwart);
+  }
+  const oar = box(0.7, 0.015, 0.035, mats.darkWood);
+  oar.position.set(0.02, 0.1, 0.06);
+  oar.rotation.y = 0.18;
+  boat.add(oar);
+  const a = Math.PI + (rnd() - 0.5) * 1.2; // behind (-z) the structure's front
+  boat.position.set(Math.sin(a) * (radius + 0.35), 0, Math.cos(a) * (radius + 0.35));
+  boat.rotation.y = a + Math.PI / 2 + (rnd() - 0.5) * 0.4;
+  root.add(boat);
+  const post = cyl(0.03, 0.035, 0.5, 5, mats.darkWood);
+  post.position.set(Math.sin(a) * radius * 0.92, 0.2, Math.cos(a) * radius * 0.92);
+  root.add(post);
+}
+
+function structure(kind: Silhouette, mats: Mats, status: Status, rnd: () => number, withDetail = false): Built {
   const g = new THREE.Group();
   const signal = new THREE.Mesh(new THREE.SphereGeometry(0.09, 10, 8), mats.status[status]);
   const signalGlow = new THREE.Sprite(mats.statusGlow[status]);
@@ -172,7 +414,10 @@ function structure(kind: Silhouette, mats: Mats, status: Status, rnd: () => numb
 
   switch (kind) {
     case "lighthouse": {
-      const tower = cyl(0.26, 0.42, 2.8, 12, mats.paleStone);
+      // Eight rows (0.35 tall) so the flat tiers can paint alternate rows red: per-face colour.
+      const tower = new THREE.Mesh(new THREE.CylinderGeometry(0.26, 0.42, 2.8, 12, 8), mats.paleStone);
+      tower.castShadow = true;
+      tower.receiveShadow = true;
       tower.position.y = 1.4;
       const band = cyl(0.33, 0.35, 0.18, 12, mats.roof);
       band.position.y = 1.2;
@@ -321,6 +566,18 @@ function structure(kind: Silhouette, mats: Mats, status: Status, rnd: () => numb
       break;
     }
   }
+  // Stove pipes and the emitter anchors exist on every tier (smoke and the lamp beam are drawn by
+  // the render paths that can afford them).
+  if (kind === "hall" || kind === "beacon") {
+    const [x, y, z, h] = kind === "hall" ? [-0.1, 1.95, -0.2, 0.55] : [-0.18, 1.2, -0.12, 0.3];
+    const pipe = cyl(0.04, 0.04, h, 6, mats.metal);
+    pipe.position.set(x, y, z);
+    g.add(pipe);
+    anchor(g, SMOKE_ANCHOR, x, y + h / 2 + 0.05, z);
+  }
+  if (kind === "workshop") anchor(g, SMOKE_ANCHOR, 0.32, 2.15, -0.15);
+  if (kind === "lighthouse") anchor(g, LAMP_ANCHOR, 0, 3.06, 0);
+  if (withDetail) detail(kind, g, mats);
   signalGlow.position.copy(signal.position);
   g.add(signal, signalGlow);
   return { group: g, signal, signalGlow, top };
@@ -364,31 +621,57 @@ function mergeStatic(group: THREE.Group, keep: THREE.Object3D | null): void {
   }
 }
 
+const FLAT_BAND = new THREE.Color(0xb3443a);
+const FLAT_MOSS = new THREE.Color(0x3d4d2b);
+
+/**
+ * Hand-painted look for the flat tiers, baked per face (no shader cost): each face's tone jitters a
+ * little, the lighthouse gets its red bands, and some up-facing roof faces go mossy.
+ */
+function flatColours(g: THREE.BufferGeometry, material: THREE.Material, mats: Mats): THREE.BufferAttribute {
+  const pos = g.getAttribute("position");
+  const out = new Float32Array(pos.count * 3);
+  const base = new THREE.Color((material as THREE.MeshLambertMaterial).color?.getHex() ?? 0x444444);
+  const c = new THREE.Color();
+  const a = new THREE.Vector3();
+  const b = new THREE.Vector3();
+  const d = new THREE.Vector3();
+  for (let f = 0; f + 2 < pos.count; f += 3) {
+    a.fromBufferAttribute(pos, f);
+    b.fromBufferAttribute(pos, f + 1);
+    d.fromBufferAttribute(pos, f + 2);
+    const cx = (a.x + b.x + d.x) / 3;
+    const cy = (a.y + b.y + d.y) / 3;
+    const cz = (a.z + b.z + d.z) / 3;
+    const h = Math.abs(Math.sin(cx * 127.1 + cy * 311.7 + cz * 74.7) * 43758.5453) % 1;
+    c.copy(base).multiplyScalar(1.6 + 0.45 * h); // flat Lambert reads darker than PBR: lift it
+    if (material === mats.paleStone && cy > 1.0 && Math.floor(cy / 0.35) % 2 === 1) c.copy(FLAT_BAND).multiplyScalar(0.9 + 0.2 * h);
+    if (material === mats.roof) {
+      const ny = b.sub(a).cross(d.sub(a)).normalize().y;
+      if (Math.abs(ny) > 0.4 && h < 0.3) c.lerp(FLAT_MOSS, 0.7);
+    }
+    for (let k = 0; k < 3; k++) out.set([c.r, c.g, c.b], (f + k) * 3);
+  }
+  return new THREE.BufferAttribute(out, 3);
+}
+
 /**
  * Flat flavour only: bake every body material's colour into vertex colours and merge the islet and
  * all non-glowing parts into ONE mesh (one draw call per islet instead of ~6). Materials in `live`
  * (windows, the status signal) stay separate because they animate per island.
  */
-function mergeFlatBody(root: THREE.Group, body: THREE.Material, live: Set<THREE.Material>): void {
+function mergeFlatBody(root: THREE.Group, body: THREE.Material, live: Set<THREE.Material>, mats: Mats): void {
   root.updateMatrixWorld(true);
   const geos: THREE.BufferGeometry[] = [];
   const drop: THREE.Mesh[] = [];
-  const c = new THREE.Color();
   root.traverse((o) => {
     if (!(o instanceof THREE.Mesh) || Array.isArray(o.material) || live.has(o.material)) return;
     const g = o.geometry.index ? o.geometry.toNonIndexed() : o.geometry.clone();
-    const n = g.getAttribute("position").count;
-    if (!g.getAttribute("color")) {
-      const m = o.material as THREE.MeshLambertMaterial;
-      c.copy(m.color ?? c.set(0x444444));
-      const colours = new Float32Array(n * 3);
-      for (let i = 0; i < n; i++) colours.set([c.r, c.g, c.b], i * 3);
-      g.setAttribute("color", new THREE.BufferAttribute(colours, 3));
-    }
     for (const name of Object.keys(g.attributes)) {
       if (name !== "position" && name !== "normal" && name !== "color") g.deleteAttribute(name);
     }
     g.applyMatrix4(o.matrixWorld);
+    if (!g.getAttribute("color")) g.setAttribute("color", flatColours(g, o.material, mats));
     geos.push(g);
     drop.push(o);
   });
@@ -418,6 +701,9 @@ interface IslandView {
   phase: number;
   /** World-space shore circle for the water's foam: x, z, radius. */
   shore: THREE.Vector3;
+  /** Cinematic anchors: chimney tops and the lighthouse lamp (children of root). */
+  smoke: THREE.Object3D[];
+  lamps: THREE.Object3D[];
 }
 
 const STATUS_COLOURS: Record<Status, THREE.Color> = {
@@ -538,6 +824,27 @@ export class Islands {
     this.glowBatch.end();
   }
 
+  /**
+   * World positions of the Cinematic emitters of one kind, written into `out` (grown as needed):
+   * xyz = position, w = how lit the island is (0 offline .. 1) times its scale. Returns the count.
+   */
+  emitters(kind: "smoke" | "lamps", out: THREE.Vector4[]): number {
+    let n = 0;
+    for (const v of this.views) {
+      const list = kind === "smoke" ? v.smoke : v.lamps;
+      if (list.length === 0) continue;
+      v.root.updateMatrixWorld();
+      const lit = (1 - v.state.weight.offline) * v.root.scale.x;
+      for (const a of list) {
+        a.getWorldPosition(this.wp);
+        const slot = out[n] ?? (out[n] = new THREE.Vector4());
+        slot.set(this.wp.x, this.wp.y, this.wp.z, lit);
+        n += 1;
+      }
+    }
+    return n;
+  }
+
   /** Draw calls the islets themselves cost (one per material, whatever the island count). */
   get batchCount(): number {
     return this.batchMeshes.length;
@@ -581,7 +888,13 @@ export class Islands {
         statusGlow: { ok: glowMat, degraded: glowMat, failing: glowMat, offline: glowMat },
         lanternGlow: lanternMat,
       };
-      const built = structure(kind, own, state.status, rnd);
+      const built = structure(kind, own, state.status, rnd, this.flavour === "pbr");
+      const smoke: THREE.Object3D[] = [];
+      const lamps: THREE.Object3D[] = [];
+      built.group.traverse((o) => {
+        if (o.name === SMOKE_ANCHOR) smoke.push(o);
+        if (o.name === LAMP_ANCHOR) lamps.push(o);
+      });
       // Swap every sprite for an anchor; the GlowBatch draws them all in one call.
       const glows: IslandView["glows"] = [];
       const sprites: THREE.Sprite[] = [];
@@ -597,7 +910,8 @@ export class Islands {
       }
       mergeStatic(built.group, null);
       root.add(islet, built.group);
-      if (this.flavour === "flat") mergeFlatBody(root, this.flatBody, new Set([signalMat, windowMat]));
+      if (this.flavour === "pbr") shoreProps(root, this.mats, radius, rnd);
+      if (this.flavour === "flat") mergeFlatBody(root, this.flatBody, new Set([signalMat, windowMat]), this.mats);
       // Move every mesh's geometry (in island-local space) into its material's bucket.
       root.updateMatrixWorld(true);
       const meshes: THREE.Mesh[] = [];
@@ -631,6 +945,8 @@ export class Islands {
         glows,
         phase: unitNoise(state.id, 71) * 10,
         shore,
+        smoke,
+        lamps,
       });
       index += 1;
     }

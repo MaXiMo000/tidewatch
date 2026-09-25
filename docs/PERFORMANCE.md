@@ -39,6 +39,9 @@ mid-tier GPU) and test on real hardware, not only throttled desktop Chrome.
 2. **Fake expensive effects.** Gradient + Fresnel water, baked glow sprites, single-layer fog.
    Planar reflections and bloom only on High.
 3. **Instancing + GPU animation.** Particles/ships/trees as `InstancedMesh`; motion in the vertex shader.
+   Every instanced material must call `pinPositionAttribute()` (`scene/instancing.ts`): on Chrome/Windows
+   (ANGLE on D3D11) a per-instance attribute landing in attribute slot 0 took a slow path that cost one
+   small instanced mesh ~35 ms a frame. Prefer a time uniform over rewriting instance buffers each frame.
 4. **Procedural geometry and textures.** Tiny bundle, no decode cost. If assets are added: KTX2 + Draco/Meshopt.
 5. **Render only when useful.** Pause on `document.hidden`; low-fps idle; frame cap on Low.
 6. **Keep data off the render path.** Socket -> store -> once-per-frame read + interpolation.

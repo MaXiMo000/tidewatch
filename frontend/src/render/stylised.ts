@@ -5,17 +5,22 @@
  * instanced silhouette treeline, no post-processing (the vignette is CSS). No downloads; lives in
  * the main bundle so the first frame never waits.
  *
- * Simple drops the glow billboards, water detail and most trees, and renders at 30 fps.
+ * Balanced also gets the living details (a heron flock, chimney smoke, the lighthouse beam: one
+ * draw call each). Simple drops those, the glow billboards, water detail and most trees, and renders
+ * at 30 fps.
  * Weather (M3, scene/weather.ts) is on every tier: latency fog, mist, storm clouds, lightning.
  */
 import * as THREE from "three";
 import { TIER_SETTINGS, type Tier } from "../quality/tiers";
+import { Beams } from "../scene/beam";
+import { Birds } from "../scene/birds";
 import { Boats } from "../scene/boats";
 import { Islands } from "../scene/islands";
 import type { WorldModel } from "../scene/model";
 import { PALETTE, SUN_DIRECTION } from "../scene/palette";
 import { Silhouettes } from "../scene/silhouettes";
 import { Sky } from "../scene/sky";
+import { Smoke } from "../scene/smoke";
 import { Water } from "../scene/water";
 import { Weather } from "../scene/weather";
 import { Channels } from "../scene/world";
@@ -42,6 +47,11 @@ export class StylisedPath implements RenderPath {
   private readonly weather = new Weather();
   private readonly hemi = new THREE.HemisphereLight(0xb7a3e6, 0x0b3a44, HEMI);
   private readonly sun = new THREE.DirectionalLight(PALETTE.sun, SUN);
+  private readonly birds = new Birds();
+  private readonly smoke = new Smoke();
+  private readonly beams = new Beams();
+  private readonly emitters: THREE.Vector4[] = [];
+  private living = true;
   private reducedMotion = false;
 
   constructor(
@@ -65,6 +75,9 @@ export class StylisedPath implements RenderPath {
       this.boats.mesh,
       this.trees.mesh,
       this.weather.mesh,
+      this.birds.mesh,
+      this.smoke.mesh,
+      this.beams.mesh,
     );
     this.applyTier(tier);
   }
@@ -86,6 +99,8 @@ export class StylisedPath implements RenderPath {
     this.islands.setGlows(t.glowSprites);
     this.treeCount = t.silhouettes;
     this.boatBudget = tier === "low" ? 16 : 40;
+    this.living = tier !== "low";
+    for (const m of [this.birds.mesh, this.smoke.mesh, this.beams.mesh]) m.visible = this.living;
   }
 
   resize(): void {
@@ -100,6 +115,11 @@ export class StylisedPath implements RenderPath {
     this.boats.update(this.model, this.boatBudget);
     this.boats.tick(t);
     this.channels.update();
+    if (this.living) {
+      this.birds.tick(t, view, this.reducedMotion);
+      this.smoke.update(this.emitters, this.islands.emitters("smoke", this.emitters), t);
+      this.beams.update(this.emitters, this.islands.emitters("lamps", this.emitters), t);
+    }
     // Weather from the data: fog/mist with latency, clouds + lightning over failing islands.
     this.weather.update(this.model, this.fog, FOG_DENSITY, seconds, this.reducedMotion);
     const storm = Math.min(1, this.model.storm * 1.5);
@@ -130,6 +150,9 @@ export class StylisedPath implements RenderPath {
     this.channels.dispose();
     this.trees.dispose();
     this.weather.dispose();
+    this.birds.dispose();
+    this.smoke.dispose();
+    this.beams.dispose();
     // A shared object (the film's beacon) belongs to main.ts: never dispose it here.
     if (this.attached?.parent === this.scene) this.scene.remove(this.attached);
     this.scene.traverse((o) => {

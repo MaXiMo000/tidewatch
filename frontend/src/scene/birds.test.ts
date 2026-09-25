@@ -1,13 +1,17 @@
 import * as THREE from "three";
 import { describe, expect, it } from "vitest";
-import { CameraRig } from "../scene/camera";
+import { CameraRig } from "./camera";
 import { Birds } from "./birds";
 
-/** Cinematic's framing (cinematic.ts `shot`) over a small archipelago, landscape. */
-function cinematicView(): { rig: CameraRig; camera: THREE.PerspectiveCamera } {
+type Shot = Parameters<CameraRig["setShot"]>[0];
+const CINEMATIC: Shot = { elevation: 0.1, distance: 0.6, targetY: 1.4, sweep: 0.28 };
+const STYLISED: Shot = { elevation: 0.3, distance: 0.85, targetY: 0.8, sweep: 0 };
+
+/** A render path's framing (its `shot`) over a small archipelago, landscape. */
+function cinematicView(shot: Shot = CINEMATIC): { rig: CameraRig; camera: THREE.PerspectiveCamera } {
   const rig = new CameraRig();
   rig.camera.aspect = 16 / 9;
-  rig.setShot({ elevation: 0.1, distance: 0.6, targetY: 1.4, sweep: 0.28 });
+  rig.setShot(shot);
   rig.frame(0, 0, 10, [
     { x: -5, z: 0 },
     { x: 5, z: 2 },
@@ -22,8 +26,11 @@ function cinematicView(): { rig: CameraRig; camera: THREE.PerspectiveCamera } {
 }
 
 describe("birds", () => {
-  it("each pass crosses the camera's frame, and passes recur", () => {
-    const { rig, camera } = cinematicView();
+  it.each([
+    ["Cinematic", CINEMATIC],
+    ["Balanced", STYLISED],
+  ] as const)("each pass crosses the %s camera's frame, and passes recur", (_name, shot) => {
+    const { rig, camera } = cinematicView(shot);
     const birds = new Birds();
     const p = new THREE.Vector3();
     const m = new THREE.Matrix4();

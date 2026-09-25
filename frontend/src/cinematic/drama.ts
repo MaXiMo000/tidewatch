@@ -11,6 +11,7 @@
  *  - fireflies: slow, warm GPU points over the banks when all is calm; they fade out in a storm
  */
 import * as THREE from "three";
+import { pinPositionAttribute } from "../scene/instancing";
 import type { WorldModel } from "../scene/model";
 import { mulberry32 } from "./textures";
 
@@ -94,6 +95,7 @@ export class Drama {
       depthWrite: false,
     });
     this.rainMesh = new THREE.Mesh(rainGeo, this.rainMat);
+    pinPositionAttribute(this.rainMat);
     this.rainMesh.frustumCulled = false;
     this.rainMesh.visible = false;
 

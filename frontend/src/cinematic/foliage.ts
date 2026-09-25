@@ -11,6 +11,7 @@
  * It is recomputed only when the topology or the camera's base framing changes.
  */
 import * as THREE from "three";
+import { pinPositionAttribute } from "../scene/instancing";
 import { params } from "../render/params";
 import type { WorldModel } from "../scene/model";
 import { leafClusterTexture, mossTexture, mulberry32 } from "./textures";
@@ -236,6 +237,7 @@ interface Batch {
 
 function batch(geometry: THREE.BufferGeometry, material: THREE.Material, capacity: number): Batch {
   const mesh = new THREE.InstancedMesh(geometry, material, capacity);
+  pinPositionAttribute(material);
   mesh.count = 0;
   mesh.frustumCulled = false; // instances span the whole world; one bounds test would be wrong
   return { mesh, count: 0 };
@@ -628,15 +630,16 @@ export class Foliage {
       const r = height * (0.08 + rnd() * 0.08);
       clumps.push(new THREE.Vector3(Math.cos(a) * r, height * (0.62 + rnd() * 0.3), Math.sin(a) * r));
     }
-    // Small far trees get fewer, bigger cards (fog eats detail; saves triangles).
+    // Small far trees get fewer, bigger cards (fog eats detail; saves triangles). Near crowns use
+    // 8-10 cards per clump: the spray texture with mip-aware alpha fills more per card than before.
     const far = height < 11;
     for (const c of clumps) {
-      const cards = far ? 5 + Math.floor(rnd() * 2) : 10 + Math.floor(rnd() * 4);
+      const cards = far ? 5 + Math.floor(rnd() * 2) : 8 + Math.floor(rnd() * 3);
       const spread = height * 0.1;
       for (let k = 0; k < cards; k++) {
         const cp = c.clone().add(new THREE.Vector3((rnd() - 0.5) * spread * 2, (rnd() - 0.3) * spread * 0.8, (rnd() - 0.5) * spread * 2));
         const cq = new THREE.Quaternion().setFromEuler(this.e.set((rnd() - 0.5) * 0.9, rnd() * Math.PI, (rnd() - 0.5) * 0.5));
-        const size = height * (far ? 0.2 + rnd() * 0.08 : 0.13 + rnd() * 0.09);
+        const size = height * (far ? 0.2 + rnd() * 0.08 : 0.15 + rnd() * 0.09);
         this.m2.compose(cp, cq, new THREE.Vector3(size, size * 0.8, size));
         this.m.multiplyMatrices(treeM, this.m2);
         this.pushMatrix(this.leaves, this.m, this.leafTint(rnd));
