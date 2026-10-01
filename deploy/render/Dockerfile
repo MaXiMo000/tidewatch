@@ -2,7 +2,7 @@
 # headers/CSP as deploy/Caddyfile) in front of uvicorn on 127.0.0.1. Render terminates TLS.
 # Build context is the repo root (see render.yaml). Base images pinned by digest.
 
-FROM node:22-slim@sha256:43ac6c60b8f89723f746e8a92ce91abd5017e627ce1ddfe4238355d3a30b772c AS web
+FROM node:26-slim@sha256:ec7758ee051e457b468b32bde57b0879010b325bb9862718e9615225ce4aaae1 AS web
 WORKDIR /web
 COPY frontend/package.json frontend/package-lock.json ./
 # --ignore-scripts: dependency install scripts never run (same as CI).
