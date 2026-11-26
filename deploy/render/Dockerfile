@@ -10,7 +10,7 @@ RUN npm ci --ignore-scripts
 COPY frontend/ ./
 RUN npm run build && npm run check:bundle
 
-FROM caddy:2@sha256:0c994536bddb66445885237f1a5dcc1916bccea922661c76b4e9fc24061f9b52 AS caddy
+FROM caddy:2@sha256:4851e54a46b206517c574821bb5cc67f170d2156041e9fbc4c9193b45e84a75b AS caddy
 
 # Keep in sync with backend/Dockerfile (the lock is resolved against this image).
 FROM python:3.12-slim@sha256:2f17fc044b579bab302c2e8054d3a686e2cb9a83de48e70534b94cd8ebbe06a9
